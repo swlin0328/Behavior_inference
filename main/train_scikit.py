@@ -12,11 +12,11 @@ import ast
 import warnings
 warnings.filterwarnings("ignore")
 
-MODEL_FILE = '../data/config/tf_model_config.ini'
+MODEL_FILE = '../data/config/model_config.ini'
 MODEL_CONFIG = configparser.ConfigParser()
 MODEL_CONFIG.read(MODEL_FILE)
 TEST_USERS = None
-TEST_DAYS = 30
+TEST_DAYS = None
 
 def main():
     init_config()
@@ -26,17 +26,17 @@ def main():
 
 def init_dataset():
     print("\npreparing training dataset...")
-    training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS)
+    training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS, standardize=False, Min_Max=True)
     training_data.split_dataset(concat=True, one_hot=False)
 
     print("\npreparing testing dataset...")
-    testing_data = dataset(test_users=TEST_USERS, mode='test', days=TEST_DAYS)
+    testing_data = dataset(test_users=TEST_USERS, mode='test', days=TEST_DAYS, standardize=False, Min_Max=True)
     testing_data.generate_naive_dataset(concat=True, one_hot=False)
     return training_data, testing_data
 
 def train_model(training_data):
-    pipe_lr = Pipeline([('scl', StandardScaler()), ('pca', PCA(n_components=10)),
-                        ('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
+    #pipe_lr = Pipeline([('scl', StandardScaler()), ('pca', PCA(n_components=10)), ('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
+    pipe_lr = Pipeline([('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
 
     print('\n========== Starting training ==========\n')
     pipe_lr.fit(training_data.X_train, training_data.y_train)

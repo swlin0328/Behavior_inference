@@ -7,40 +7,34 @@ import pandas as pd
 import numpy as np
 import pickle
 from lib.util.source import data_extractor
-from sklearn.preprocessing import StandardScaler
 
 class dataset:
-    def __init__(self, pkl_file=None, cluster_file='user_group_relation.csv', BI_file='user_info.csv', tax_file='city_tax.csv',
-                 weather_file='city_weather.csv', test_users=None, days=30, mode='train', enc=None, scaler = None, standardize = False):
+    def __init__(self, pkl_file=None, cluster_file='user_group_relation.csv', BI_file='user_info.csv', tax_file='city_tax.csv', weather_file='city_weather.csv',
+                 test_users=None, days=30, mode='train', enc=None, standardize = False, Min_Max = False):
         if pkl_file != None:
             self.filename = pkl_file
             self.load_pkl()
             return
 
+        self.input = {}
         self.concat_input = []
         self.batch_idx = 0
         self.data_size = 0
         self.is_concat = False
-        self.enc = enc
+        self.normalized = False
         self.mode = mode
-        self.input = {}
-        self.scaler = scaler
+        self.enc = enc
 
-        self.init_datasource(cluster_file, BI_file, tax_file, weather_file, test_users, days, mode)
         self.init_dataprocessor()
-        if standardize:
-            self.standardize_dataset()
+        self.init_datasource(cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, Min_Max)
 
     def init_dataprocessor(self):
         if self.enc == None and self.mode == 'train':
             self.enc = OneHotEncoder(handle_unknown='ignore')
 
-        if self.scaler == None and self.mode == 'train':
-            self.scaler = {}
-
-    def init_datasource(self, cluster_file, BI_file, tax_file, weather_file, test_users, days, mode):
-        data_source = data_extractor(cluster_file, BI_file, tax_file, weather_file)
-        data = data_source.init_with_csv(test_users, days, mode)
+    def init_datasource(self, cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, Min_Max):
+        data_source = data_extractor(cluster_file, BI_file, tax_file, weather_file, mode=mode)
+        data = data_source.init_with_csv(test_users, days, standardize, Min_Max)
         self.input['BI'] = data['BI']
         self.input['tax'] = data['tax']
         self.input['weather'] = data['weather']
@@ -49,7 +43,6 @@ class dataset:
         self.tax_size = data['tax_size']
         self.weather_size = data['weather_size']
         self.data_size = len(self.label)
-
         if len(self.input['BI']) != self.data_size or len(self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
             raise ValueError('Illegal dataset size!')
 
@@ -57,7 +50,7 @@ class dataset:
         return self.data_size
 
     def get_dataprocessor(self):
-        return self.scaler, self.enc
+        return self.enc
 
     def concat_input_data(self):
         if len(self.concat_input) == 0:
@@ -96,20 +89,6 @@ class dataset:
                                                                                 test_size=test_size, random_state=0)
         self.is_concat = concat
 
-    def standardize_dataset(self):
-        if self.scaler is None:
-            raise ValueError('None type of standardizer!')
-
-        if self.mode == 'train':
-            for key, data in self.input.items():
-                self.scaler[key] = StandardScaler()
-                self.scaler[key].fit(data)
-
-        for key, data in self.input.items():
-            self.input[key] = self.scaler[key].transform(data)
-
-        return self.scaler
-
     def next_train_batch(self, batch_size):
         self.batch_idx = self.batch_idx + batch_size
         if self.y_train is None or self.X_train is None:
@@ -140,20 +119,6 @@ class dataset:
             x_tax.append(input_x[idx][1])
             x_weather.append(input_x[idx][2])
         return {'BI': x_BI, 'tax': x_tax, 'weather': x_weather}, label_y
-
-    def load_model_from_pkl(self):
-        model_path = 'model/' + self.model_name
-        with open(model_path, 'rb') as file:
-            model = pickle.load(file)
-        return model
-
-    def save_model_to_pkl(self, trained_model):
-        file_path = r'model/' + self.model_name
-        backup_path = r'model/backup/' + self.model_name + '_' + strftime('%Y-%m-%d_%H-%M')
-        with open(file_path, 'wb') as file:
-            pickle.dump(trained_model, file)
-        with open(backup_path, 'wb') as file:
-            pickle.dump(trained_model, file)
 
     def load_pkl(self):
         file = open(self.filename, 'rb')
