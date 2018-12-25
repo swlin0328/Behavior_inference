@@ -2,8 +2,7 @@
 # -*- coding: utf-8 -*-
 import configparser
 import tensorflow as tf
-from lib.model.branch_DNN import build_model
-#from lib.model.branch_CNN import build_model
+from lib.model.branch_CNN import build_model
 from lib.util.dataset import dataset
 import ast
 import warnings
@@ -130,7 +129,6 @@ def parse_args():
     MODEL_FILE = '../data/config/' + args.model_config + '.ini'
     if not os.path.isfile(MODEL_FILE):
         raise ValueError('File not exist: ' + MODEL_FILE)
-
     MODEL_CONFIG = configparser.ConfigParser()
     MODEL_CONFIG.read(MODEL_FILE)
 
