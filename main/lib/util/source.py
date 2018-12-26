@@ -35,9 +35,13 @@ class data_extractor:
         self.tax_max = {}
         self.tax_mean = {}
         self.tax_std = {}
-        self.weather_max = {}
-        self.weather_mean = {}
-        self.weather_std = {}
+        self.weather_max = {'City': {},
+                            'Region': {}}
+        self.weather_mean = {'City': {},
+                             'Region': {}}
+        self.weather_std = {'City': {},
+                            'Region': {}}
+        self.weather_city_avg = {}
 
         self.input_BI = []
         self.input_tax = []
@@ -79,9 +83,11 @@ class data_extractor:
         tax_df = pd.read_csv(self.tax_path)
         self.get_group_and_key(tax_df, 'tax', '鄉鎮市區')
         if standardize:
-            self.group_dict['Group']['tax'].apply(lambda x: self.Standardization(x, tax_attr, self.tax_mean, self.tax_std))
+            self.group_dict['Group']['tax'] = self.group_dict['Group']['tax'].apply(
+                lambda x: self.Standardization(x, tax_attr, self.tax_mean, self.tax_std)).groupby(['鄉鎮市區'])
         if Min_Max:
-            self.group_dict['Group']['tax'].apply(lambda x: self.Min_Max(x, tax_attr, self.tax_max))
+            self.group_dict['Group']['tax'] = self.group_dict['Group']['tax'].apply(
+                lambda x: self.Min_Max(x, tax_attr, self.tax_max)).groupby(['鄉鎮市區'])
 
     def extract_weather_df(self, standardize, Min_Max, days):
         weather_df = pd.read_csv(self.weather_path)
@@ -94,10 +100,17 @@ class data_extractor:
         self.get_group_and_key(weather_df, 'weather_city', 'City')
         self.get_group_and_key(weather_df, 'weather_region', 'Region')
         if standardize:
-            self.group_dict['Group']['weather_region'].apply(lambda x: self.Standardization(x, weather_attr,
-                                                                        self.weather_mean, self.weather_std))
+            self.group_dict['Group']['weather_city'] = self.group_dict['Group']['weather_city'].apply(
+                lambda x: self.Standardization(x, weather_attr, self.weather_mean['City'], self.weather_std['City']
+                                               )).groupby(['City'])
+            self.group_dict['Group']['weather_region'] = self.group_dict['Group']['weather_region'].apply(
+                lambda x: self.Standardization(x, weather_attr, self.weather_mean['Region'], self.weather_std['Region']
+                                               )).groupby(['Region'])
         if Min_Max:
-            self.group_dict['Group']['weather_region'].apply(lambda x: self.Min_Max(x, weather_attr, self.weather_max))
+            self.group_dict['Group']['weather_city'] = self.group_dict['Group']['weather_city'].apply(
+                lambda x: self.Min_Max(x, weather_attr, self.weather_max['City'])).groupby(['City'])
+            self.group_dict['Group']['weather_region'] = self.group_dict['Group']['weather_region'].apply(
+                lambda x: self.Min_Max(x, weather_attr, self.weather_max['Region'])).groupby(['Region'])
 
     def select_dataset_by_time(self, weather_df, days):
         split_date = datetime.datetime.today().date() - datetime.timedelta(days)
@@ -145,7 +158,8 @@ class data_extractor:
         if location['region'] in self.group_dict['Group_key']['weather_region']:
             weather_df = self.group_dict['Group']['weather_region'].get_group(location['region'])
         elif location['city'] in self.group_dict['Group_key']['weather_city']:
-            weather_df = self.group_dict['Group']['weather_city'].get_group(location['city'])
+            weather_city = self.group_dict['Group']['weather_city'].get_group(location['city'])
+            weather_df = self.compute_average_weather(weather_city, location['city'])
         else:
             return
 
@@ -164,6 +178,19 @@ class data_extractor:
                 self.input_tax.append(tax_data)
                 self.input_weather.append(weather_data)
                 self.label.append(group_label)
+
+    def compute_average_weather(self, weather_df, location):
+        if location not in self.weather_city_avg.keys():
+            time_index = weather_df.index.unique()
+            avg_csv = pd.DataFrame(index=time_index, columns=weather_attr)
+            for time in time_index:
+                if weather_df.loc[time, weather_attr].size > 1:
+                    avg_csv.loc[time, weather_attr] = weather_df.loc[time, weather_attr].mean(axis=0)
+                else:
+                    avg_csv.loc[time, weather_attr] = weather_df.loc[time, weather_attr]
+            self.weather_city_avg[location] = avg_csv
+
+        return self.weather_city_avg[location]
 
     def is_valid_size(self, BI_data, tax_data, weather_data):
         if BI_data.size != self.BI_size:
@@ -185,6 +212,7 @@ class data_extractor:
             max_dict[group_key] = series.max()
         series_normalize = series / max_dict[group_key]
         df_group.loc[:, attr] = series_normalize
+        return df_group
 
     def Standardization(self, df_group, attr, avg_dict, stdv_dict):
         group_key = df_group.name
@@ -194,6 +222,7 @@ class data_extractor:
             stdv_dict[group_key] = series.std()
         series_standardized = (series - avg_dict[group_key]) / stdv_dict[group_key]
         df_group.loc[:, attr] = series_standardized
+        return df_group
 
     def save_statistics_result(self, path=None):
         if self.mode == 'train':
