@@ -6,6 +6,7 @@ import datetime
 from configobj import ConfigObj
 import tensorflow as tf
 
+
 def build_model(training_dataset, config_file):
     with tf.device('/gpu:0'):
         tf.reset_default_graph()
@@ -38,6 +39,7 @@ def build_model(training_dataset, config_file):
                 'batch_size': batch_size}
         return config
 
+
 def init_input_tensor(training_dataset):
     input_tensor = {}
 
@@ -48,6 +50,7 @@ def init_input_tensor(training_dataset):
         with tf.variable_scope(name_or_scope='input_layer_' + input_id, reuse=False):
             input_tensor[input_id] = tf.placeholder("float", [None, len(training_data[input_id][0])], name=input_id)
     return input_tensor
+
 
 def init_hidden_tensor(data_layer, keep_prob, batch_size):
     hidden_layer = {}
@@ -62,8 +65,7 @@ def init_hidden_tensor(data_layer, keep_prob, batch_size):
         else:
             with tf.variable_scope(name_or_scope='hidden_' + input_id, reuse=False):
                 input_x = tf.expand_dims(data_layer[input_id], -1)
-                conv_out = tf.layers.conv1d(input_x, 8, 5, padding='same', activation=tf.nn.relu)
-                conv_out = tf.layers.conv1d(conv_out, 8, 3, padding='same', activation=tf.nn.relu)
+                conv_out = conv_layer(input_x, filters=8, kernel_size=5, name="conv")
 
                 stacked_rnn = [lstm_cell(5, keep_prob) for _ in range(1)]
                 mlstm_cell = tf.contrib.rnn.MultiRNNCell(cells=stacked_rnn, state_is_tuple=True)
@@ -75,8 +77,9 @@ def init_hidden_tensor(data_layer, keep_prob, batch_size):
         hidden_output = [out for out in hidden_layer.values()]
         concat_layer = tf.concat(hidden_output, 1)
         output_class = int(data_layer['group_label'].shape[1])
-        hidden_layer['concat_layer'] = tf.layers.dense(concat_layer, output_class, activation=tf.nn.sigmoid)
+        hidden_layer['concat_layer'] = fc_layer(concat_layer, output_class, name='fc_concat')
         return hidden_layer
+
 
 def init_output_tensor(data_layer, hidden_layer):
     with tf.variable_scope(name_or_scope='output_layer', reuse=False):
@@ -87,6 +90,34 @@ def init_output_tensor(data_layer, hidden_layer):
         output_layer = tf.matmul(hidden_layer['concat_layer'], output) + bias_output
         return output_layer
 
+
 def lstm_cell(num_cell, keep_prob):
     lstm_cell = tf.contrib.rnn.BasicLSTMCell(num_units=num_cell, state_is_tuple=True)
     return tf.contrib.rnn.DropoutWrapper(cell=lstm_cell, output_keep_prob=keep_prob)
+
+
+def conv_layer(input, filters, kernel_size=5, pool_size=1, name="conv"):
+    with tf.name_scope(name):
+        channels_in = int(input.shape[-1])
+        w = tf.Variable(tf.truncated_normal([kernel_size, channels_in, filters], stddev=0.1), name='w')
+        b = tf.Variable(tf.constant(0.1, shape=[filters], name="b"))
+        conv = tf.nn.conv1d(input, w, stride=1, padding='SAME')
+        act = tf.nn.relu(conv + b)
+
+        tf.summary.histogram("weights", w)
+        tf.summary.histogram("biases", b)
+        tf.summary.histogram("activations", act)
+        return tf.layers.max_pooling1d(act, pool_size=pool_size, strides=pool_size, padding="SAME")
+
+
+def fc_layer(input, output_size, name="fc"):
+    with tf.name_scope(name):
+        input_size = int(input.shape[-1])
+        w = tf.Variable(tf.truncated_normal([input_size, output_size], stddev=0.1), name='w')
+        b = tf.Variable(tf.constant(0.1, shape=[output_size], name="b"))
+        act = tf.nn.sigmoid(tf.matmul(input, w) + b)
+
+        tf.summary.histogram("weights", w)
+        tf.summary.histogram("biases", b)
+        tf.summary.histogram("activations", act)
+        return act
