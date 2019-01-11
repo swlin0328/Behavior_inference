@@ -15,8 +15,8 @@ DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
 ATTR_FILE = '../data/config/infer_attr.ini'
 ATTR_CONFIG = configparser.ConfigParser()
 ATTR_CONFIG.read(ATTR_FILE)
-weather_attr = ast.literal_eval(ATTR_CONFIG['weather']['attr'])
-tax_attr = ast.literal_eval(ATTR_CONFIG['tax']['attr'])
+WEATHER_ATTR = ast.literal_eval(ATTR_CONFIG['weather']['attr'])
+TAX_ATTR = ast.literal_eval(ATTR_CONFIG['tax']['attr'])
 
 class data_extractor:
     def __init__(self, cluster_file='user_group_relation.csv', BI_file='user_info.csv',
@@ -86,16 +86,18 @@ class data_extractor:
         self.get_group_and_key(tax_df, 'tax', '鄉鎮市區')
         if standardize:
             self.group_dict['Group']['tax'] = self.group_dict['Group']['tax'].apply(
-                lambda x: self.standardization(x, tax_attr, self.tax_mean, self.tax_std)).groupby(['鄉鎮市區'])
+                lambda x: self.standardization(x, TAX_ATTR, self.tax_mean, self.tax_std)).groupby(['鄉鎮市區'])
         if Min_Max:
             self.group_dict['Group']['tax'] = self.group_dict['Group']['tax'].apply(
-                lambda x: self.min_max(x, tax_attr, self.tax_max)).groupby(['鄉鎮市區'])
+                lambda x: self.min_max(x, TAX_ATTR, self.tax_max)).groupby(['鄉鎮市區'])
 
     def extract_weather_df(self, standardize, Min_Max, days):
         weather_df = pd.read_csv(self.weather_path)
         weather_df = weather_df.set_index(pd.to_datetime(weather_df['Reporttime']))
+
         weather_df['City'] = weather_df['Area'].str.split('-', expand=True)[0]
         weather_df['Region'] = weather_df['Area'].str.split('-', expand=True)[1]
+        weather_df = self.preprocess_in_duration(weather_df, ATTR_CONFIG['weather'])
         if not self.split_dataset_by_user:
             weather_df = self.select_dataset_by_time(weather_df, days)
 
@@ -103,16 +105,30 @@ class data_extractor:
         self.get_group_and_key(weather_df, 'weather_region', 'Region')
         if standardize:
             self.group_dict['Group']['weather_city'] = self.group_dict['Group']['weather_city'].apply(
-                lambda x: self.standardization(x, weather_attr, self.weather_mean['City'], self.weather_std['City']
+                lambda x: self.standardization(x, WEATHER_ATTR, self.weather_mean['City'], self.weather_std['City']
                                                )).groupby(['City'])
             self.group_dict['Group']['weather_region'] = self.group_dict['Group']['weather_region'].apply(
-                lambda x: self.standardization(x, weather_attr, self.weather_mean['Region'], self.weather_std['Region']
+                lambda x: self.standardization(x, WEATHER_ATTR, self.weather_mean['Region'], self.weather_std['Region']
                                                )).groupby(['Region'])
         if Min_Max:
             self.group_dict['Group']['weather_city'] = self.group_dict['Group']['weather_city'].apply(
-                lambda x: self.min_max(x, weather_attr, self.weather_max['City'])).groupby(['City'])
+                lambda x: self.min_max(x, WEATHER_ATTR, self.weather_max['City'])).groupby(['City'])
             self.group_dict['Group']['weather_region'] = self.group_dict['Group']['weather_region'].apply(
-                lambda x: self.min_max(x, weather_attr, self.weather_max['Region'])).groupby(['Region'])
+                lambda x: self.min_max(x, WEATHER_ATTR, self.weather_max['Region'])).groupby(['Region'])
+
+    def preprocess_in_duration(self, df, duration):
+        format_str = '%Y/%m/%d'
+        start_date = datetime.datetime.strptime(duration['start_date'], format_str).date()
+        end_date = datetime.datetime.strptime(duration['end_date'], format_str).date()
+        duration = np.logical_and(df.index.date > start_date, df.index.date < end_date)
+        df = df[duration].groupby(['Region'])
+        df = df.apply(lambda x: self.median_filter(x, 3, WEATHER_ATTR))
+        return df
+
+    def median_filter(self, df, window_size, attr):
+        start_idx = window_size - 1
+        df.loc[start_idx:, attr] = df[attr].rolling(window_size).median()
+        return df
 
     def select_dataset_by_time(self, weather_df, days):
         split_date = datetime.datetime.today().date() - datetime.timedelta(days)
@@ -135,6 +151,7 @@ class data_extractor:
                 continue
 
             BI_data, tax_data, location = self.extract_user_data(user)
+            location['region'] = location['region'].strip('區')
             self.group_dict['Group']['daily_group'] = self.group_dict['Group']['cluster'].get_group(user).groupby('Week_ID')
             self.group_dict['Group_key']['daily_group'] = self.group_dict['Group']['daily_group'].groups.keys()
             self.combine_user_data_with_daily_weather(BI_data, tax_data, location)
@@ -148,7 +165,7 @@ class data_extractor:
         taget_region_tax = taget_region_tax.set_index(['村里'])
 
         BI_data = target_user.values[0][3:]
-        tax_data = taget_region_tax.loc['合計', tax_attr].values.reshape(-1)
+        tax_data = taget_region_tax.loc['合計', TAX_ATTR].values.reshape(-1)
 
         if self.BI_size == 0:
             self.BI_size = BI_data.size
@@ -169,10 +186,10 @@ class data_extractor:
             weather_for_weekid = weather_df[(weather_df.index.weekday + 1) == weekid]
             date = pd.unique(weather_for_weekid.index.date)
             for date_idx in date:
-                weather_data = weather_df[weather_df.index.date == date_idx][weather_attr].values.reshape(-1)
+                weather_data = weather_df[weather_df.index.date == date_idx][WEATHER_ATTR].values.reshape(-1)
                 if self.weather_size == 0:
                     self.weather_size = weather_data.size
-                if not self.is_valid_size(BI_data, tax_data, weather_data):
+                if not self.is_valid_data(BI_data, tax_data, weather_data):
                     continue
 
                 group_label = self.group_dict['Group']['daily_group'].get_group(weekid)['Group_ID'].values[0]
@@ -184,22 +201,29 @@ class data_extractor:
     def compute_average_weather(self, weather_df, location):
         if location not in self.weather_city_avg.keys():
             time_index = weather_df.index.unique()
-            avg_csv = pd.DataFrame(index=time_index, columns=weather_attr)
+            avg_csv = pd.DataFrame(index=time_index, columns=WEATHER_ATTR)
             for time in time_index:
-                if weather_df.loc[time, weather_attr].size > 1:
-                    avg_csv.loc[time, weather_attr] = weather_df.loc[time, weather_attr].mean(axis=0)
+                if weather_df.loc[time, WEATHER_ATTR].size > 1:
+                    avg_csv.loc[time, WEATHER_ATTR] = weather_df.loc[time, WEATHER_ATTR].mean(axis=0)
                 else:
-                    avg_csv.loc[time, weather_attr] = weather_df.loc[time, weather_attr]
+                    avg_csv.loc[time, WEATHER_ATTR] = weather_df.loc[time, WEATHER_ATTR]
             self.weather_city_avg[location] = avg_csv
 
         return self.weather_city_avg[location]
 
-    def is_valid_size(self, BI_data, tax_data, weather_data):
+    def is_valid_data(self, BI_data, tax_data, weather_data):
         if BI_data.size != self.BI_size:
             return False
         if tax_data.size != self.tax_size:
             return False
         if weather_data.size != self.weather_size:
+            return False
+
+        if pd.isnull(BI_data).any():
+            return False
+        if pd.isnull(tax_data).any():
+            return False
+        if pd.isnull(weather_data).any():
             return False
         return True
 

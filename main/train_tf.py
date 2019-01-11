@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import configparser
 import tensorflow as tf
-from lib.model.branch_model import build_model
+from lib.model.branch_DNN import build_model
 from lib.util.dataset import dataset
 import ast
 import warnings
