@@ -12,39 +12,56 @@ import configparser
 from lib.util.dataset import dataset, generate_test_users
 import ast
 import warnings
+import pandas as pd
+import os
+
 warnings.filterwarnings("ignore")
 
 MODEL_FILE = '../data/config/model_config.ini'
 MODEL_CONFIG = configparser.ConfigParser()
 MODEL_CONFIG.read(MODEL_FILE)
 
+DIR_FILE = '../data/config/dir_path.ini'
+DIR_CONFIG = configparser.ConfigParser()
+DIR_CONFIG.read(DIR_FILE)
+
 TEST_USERS = None
 TEST_DAYS = None
 DATASET = None
 TEST_USERS_PER_GROUP = None
+DATA_PATH = None
 
 def main():
     init_config()
-    search_useful_features()
+    num_group = get_num_group()
+    search_useful_features(num_group)
 
 
-def train_pipeline():
-    training_data, testing_data = init_dataset()
-    model = train_model(training_data)
-    predict_y = model.predict(testing_data.naive_X)
-    test_acc = accuracy_score(testing_data.naive_y, predict_y)
-    test_f1 = f1_score(testing_data.naive_y, predict_y, average='macro')
-    print('Accuracy for testing data: %.3f' % test_acc)
-    print('F1_score for testing data: %.3f' % test_f1)
-    return test_f1
+def train_pipeline(num_group):
+    model_score = []
+    for idx in range(num_group):
+        if idx > 0:
+            break
+        target_label = idx + 1
+        print('=============== model_' + str(target_label) + ' training ===============')
+        training_data, testing_data = init_dataset(num_group, target_label, load_data=False)
+        model = train_model(training_data)
+
+        predict_y = model.predict(testing_data.naive_X)
+        test_acc = accuracy_score(testing_data.naive_y, predict_y)
+        test_f1 = f1_score(testing_data.naive_y, predict_y)
+        model_score.append(test_f1)
+        print('Accuracy for testing data: %.3f' % test_acc)
+        print('F1_score for testing data: %.3f' % test_f1)
+    return model_score
 
 
-def search_useful_features():
+def search_useful_features(num_group):
     current_features = set(extract_features_name('template')[3:])
     drop_cols = set()
     drop_features(source_name='template', target_name='user_info', drop_feature=drop_cols)
-    original_acc = train_pipeline()
-    record_metrics = [original_acc]
+    original_acc = train_pipeline(num_group)
+    record_metrics = [original_acc[0]]
     record_drop_features = ['None']
     while True:
         temp_metrics = []
@@ -56,8 +73,8 @@ def search_useful_features():
             print(temp_drop)
 
             drop_features(source_name='template', target_name='user_info', drop_feature=temp_drop)
-            test_acc = train_pipeline()
-            temp_metrics.append(test_acc)
+            test_acc = train_pipeline(num_group)
+            temp_metrics.append(test_acc[0])
             temp_features.append(col)
 
         best_acc = max(temp_metrics)
@@ -75,18 +92,41 @@ def search_useful_features():
     print(record_metrics)
 
 
-def init_dataset():
-    print("\npreparing training dataset...")
-    training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS, standardize=False, min_max=True)
+def init_dataset(num_group, target_label, load_data):
+    train_file_name = "original_training_data_" + str(num_group)
+    test_file_name = "original_testing_data_" + str(num_group)
+    pkl_path = DATA_PATH + 'result/dataset/'
+    if not os.path.isfile(pkl_path + train_file_name + '.pkl') or not os.path.isfile(
+            pkl_path + test_file_name + '.pkl') or not load_data:
+        print("\n preparing training dataset...")
+        training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS, standardize=False, min_max=True)
+        training_data.save_pkl(train_file_name)
+        print("\n preparing testing dataset...")
+        testing_data = dataset(test_users=TEST_USERS, mode='test', days=TEST_DAYS, standardize=False, min_max=True)
+        testing_data.save_pkl(test_file_name)
+    else:
+        training_data = dataset(pkl_file=train_file_name)
+        testing_data = dataset(pkl_file=test_file_name)
+
+    training_data.convert_to_binary_label(target_label)
     training_data.split_dataset(concat=True, one_hot=False)
 
-    print("\npreparing testing dataset...")
-    testing_data = dataset(test_users=TEST_USERS, mode='test', days=TEST_DAYS, standardize=False, min_max=True)
+    testing_data.convert_to_binary_label(target_label)
     testing_data.generate_naive_dataset(concat=True, one_hot=False)
     return training_data, testing_data
 
+
+def get_num_group(file_name='user_group_relation'):
+    file_path = DATA_PATH + file_name + '.csv'
+    label_df = pd.read_csv(file_path)
+
+    group_label = label_df.groupby('Group_ID')
+    num_group = len(group_label.groups.keys())
+    return num_group
+
+
 def train_model(training_data):
-    #pipe_lr = Pipeline([('pca', PCA(n_components=30)), ('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
+    #pipe_lr = Pipeline([('scl', StandardScaler()), ('pca', PCA(n_components=10)), ('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
     pipe_lr = Pipeline([('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
 
     print('\n========== Starting training ==========\n')
@@ -98,16 +138,19 @@ def train_model(training_data):
     print('\n========== Training stage is complete ==========\n')
     return pipe_lr
 
+
 def init_config():
-    global TEST_USERS, TEST_DAYS, TEST_USERS_PER_GROUP
+    global TEST_USERS, TEST_DAYS, TEST_USERS_PER_GROUP, DATA_PATH
     TEST_USERS = ast.literal_eval(MODEL_CONFIG['train']['test_users'])
     TEST_USERS_PER_GROUP = int(MODEL_CONFIG['train']['test_users_per_group'])
+    DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
     if len(TEST_USERS) < 1:
         TEST_USERS = generate_test_users(TEST_USERS_PER_GROUP)
 
     if MODEL_CONFIG['train']['test_users'] == 'None' or len(TEST_USERS) == 0:
         TEST_USERS = None
         TEST_DAYS = int(MODEL_CONFIG['train']['test_days'])
+
 
 if __name__ == '__main__':
     main()

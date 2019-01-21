@@ -2,15 +2,17 @@
 # -*- coding: utf-8 -*-
 import configparser
 import tensorflow as tf
+import pandas as pd
 from lib.model.branch_DNN import build_model
-from lib.util.dataset import dataset, generate_test_users
+from lib.util.dataset import dataset
+from lib.util.dataset import generate_test_users
 from lib.util.preprocess import drop_features, extract_features_name, feature_engineering
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import f1_score, accuracy_score
 import ast
 import warnings
 import argparse
 import os
-import pandas as pd
 
 warnings.filterwarnings("ignore")
 
@@ -33,54 +35,29 @@ TEST_USERS_PER_GROUP = None
 def main():
     parse_args()
     init_config()
-    search_useful_features()
+    num_group = get_num_group()
+    enc = init_binary_encoder()
+    search_useful_features(num_group, enc)
 
-def train_pipeline():
-    training_data, validating_data, testing_data = init_dataset()
-    validate_f1, test_f1 = train_model(training_data, validating_data, testing_data)
-    return test_f1
+def train_pipeline(num_group, enc):
+    model_score = []
+    for idx in range(num_group):
+        if idx > 0:
+            break
+        target_label = idx + 1
+        print('=============== model_' + str(target_label) + ' training ===============')
+        tf.reset_default_graph()
+        training_data, validating_data, testing_data = init_dataset(num_group, target_label, enc, load_data=False)
+        validate_f1, test_f1 = train_model(training_data, validating_data, testing_data)
+        model_score.append(test_f1)
+    return model_score
 
-def create_useful_features():
-    current_features = extract_features_name('template')[3:28]
-    source_path = DATA_PATH + 'template.csv'
-    target_path = DATA_PATH + 'user_info.csv'
-    df = pd.read_csv(source_path)
-
-    useful_attr = []
-    original_acc = train_pipeline()
-    record_metrics = [original_acc]
-    record_features_creation = []
-    operator = ['*']
-
-    for idx, attr_1 in enumerate(current_features):
-        for attr_2 in current_features[idx:]:
-            for op in operator:
-                tf.reset_default_graph()
-
-                for creator in record_features_creation:
-                    df, _ = feature_engineering(df, attribute_1=creator[0], attribute_2=creator[1], operator=creator[2])
-
-                feature_creator = [attr_1, attr_2, op]
-                df, new_feature = feature_engineering(df, attribute_1=feature_creator[0],
-                                                      attribute_2=feature_creator[1], operator=feature_creator[2])
-                df.to_csv(target_path, encoding='utf_8_sig', index=False)
-                test_acc = train_pipeline()
-                if test_acc > record_metrics[-1]:
-                    record_metrics.append(test_acc)
-                    useful_attr.append(new_feature)
-                    record_features_creation.append(feature_creator)
-
-    print('=============== ' + 'created features' + ' ===============')
-    print(useful_attr)
-    print('=============== ' + ' recorded metrics ' + ' ===============')
-    print(record_metrics)
-
-def search_useful_features():
+def search_useful_features(num_group, enc):
     current_features = set(extract_features_name('template')[3:])
     drop_cols = set()
     drop_features(source_name='template', target_name='user_info', drop_feature=drop_cols)
-    original_acc = train_pipeline()
-    record_metrics = [original_acc]
+    original_acc = train_pipeline(num_group, enc)
+    record_metrics = [original_acc[0]]
     record_drop_features = ['None']
     while True:
         temp_metrics = []
@@ -93,8 +70,8 @@ def search_useful_features():
             print(temp_drop)
 
             drop_features(source_name='template', target_name='user_info', drop_feature=temp_drop)
-            test_acc = train_pipeline()
-            temp_metrics.append(test_acc)
+            test_acc = train_pipeline(num_group, enc)
+            temp_metrics.append(test_acc[0])
             temp_features.append(col)
 
         best_acc = max(temp_metrics)
@@ -111,21 +88,42 @@ def search_useful_features():
     print('=============== ' + ' recorded metrics ' + ' ===============')
     print(record_metrics)
 
-def init_dataset():
-    if TRAINING_DATA is None:
+def get_num_group(file_name='user_group_relation'):
+    file_path = DATA_PATH + file_name + '.csv'
+    label_df = pd.read_csv(file_path)
+
+    group_label = label_df.groupby('Group_ID')
+    num_group = len(group_label.groups.keys())
+    return num_group
+
+def init_binary_encoder():
+    enc = OneHotEncoder()
+    enc.fit([[0], [1]])
+    return enc
+
+def init_dataset(num_group, target_label, enc, load_data):
+    train_file_name = "original_training_data_" + str(num_group)
+    test_file_name = "original_testing_data_" + str(num_group)
+    pkl_path = DATA_PATH + 'result/dataset/'
+    if not os.path.isfile(pkl_path + train_file_name + '.pkl') or not os.path.isfile(
+            pkl_path + test_file_name + '.pkl') or not load_data:
         print("\n preparing training dataset...")
-        training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS, standardize=False, min_max=True)
-        training_data.split_dataset(concat=False, one_hot=True)
-        training_data.save_pkl('training_data')
+        training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS, standardize=False, min_max=True, enc=enc)
+        training_data.save_pkl(train_file_name)
+        print("\n preparing testing dataset...")
+        testing_data = dataset(test_users=TEST_USERS, mode='test', enc=enc, days=TEST_DAYS, standardize=False, min_max=True)
+        testing_data.save_pkl(test_file_name)
     else:
-        training_data = dataset(pkl_file=TRAINING_DATA)
+        training_data = dataset(pkl_file=train_file_name)
+        testing_data = dataset(pkl_file=test_file_name)
+
+    training_data.convert_to_binary_label(target_label)
+    training_data.split_dataset(concat=False, one_hot=True)
 
     validating_X, validating_y = training_data.get_non_concate_dataset(training_data.X_test, training_data.y_test)
     validating_data = {'input': validating_X, 'label': validating_y}
-    one_hot_enc = training_data.get_dataprocessor()
 
-    print("\n preparing testing dataset...")
-    testing_data = dataset(test_users=TEST_USERS, mode='test', enc=one_hot_enc, days=TEST_DAYS, standardize=False, min_max=True)
+    testing_data.convert_to_binary_label(target_label)
     testing_data.generate_naive_dataset(concat=False, one_hot=True)
     return training_data, validating_data, testing_data
 

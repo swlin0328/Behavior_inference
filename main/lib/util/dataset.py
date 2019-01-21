@@ -7,12 +7,21 @@ import pandas as pd
 import numpy as np
 import pickle
 from lib.util.source import data_extractor
+import configparser
+import math
+
+DIR_FILE = '../data/config/dir_path.ini'
+DIR_CONFIG = configparser.ConfigParser()
+DIR_CONFIG.read(DIR_FILE)
+DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
 
 class dataset:
-    def __init__(self, pkl_file=None, cluster_file='user_group_relation.csv', BI_file='user_info.csv', tax_file='city_tax.csv', weather_file='city_weather.csv',
-                 test_users=None, days=30, mode='train', enc=None, standardize = False, Min_Max = False):
+    def __init__(self, pkl_file=None, cluster_file='user_group_relation.csv', BI_file='user_info.csv',
+                 tax_file='city_tax.csv', weather_file='city_weather.csv', test_users=None, days=30,
+                 mode='train', enc=None, standardize=False, min_max=False):
         if pkl_file != None:
-            self.filename = pkl_file
+            path = DATA_PATH + '/result/dataset/'
+            self.filename = path + pkl_file + '.pkl'
             self.load_pkl()
             return
 
@@ -25,16 +34,11 @@ class dataset:
         self.mode = mode
         self.enc = enc
 
-        self.init_dataprocessor()
-        self.init_datasource(cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, Min_Max)
+        self.init_datasource(cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, min_max)
 
-    def init_dataprocessor(self):
-        if self.enc == None and self.mode == 'train':
-            self.enc = OneHotEncoder(handle_unknown='ignore')
-
-    def init_datasource(self, cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, Min_Max):
+    def init_datasource(self, cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, min_max):
         data_source = data_extractor(cluster_file, BI_file, tax_file, weather_file, mode=mode)
-        data = data_source.init_with_csv(test_users, days, standardize, Min_Max)
+        data = data_source.init_with_csv(test_users, days, standardize, min_max)
         self.input['BI'] = data['BI']
         self.input['tax'] = data['tax']
         self.input['weather'] = data['weather']
@@ -43,6 +47,7 @@ class dataset:
         self.tax_size = data['tax_size']
         self.weather_size = data['weather_size']
         self.data_size = len(self.label)
+
         if len(self.input['BI']) != self.data_size or len(self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
             raise ValueError('Illegal dataset size!')
 
@@ -64,7 +69,8 @@ class dataset:
             raise ValueError('Empty dataset!')
 
         if one_hot:
-            if self.mode == 'train':
+            if self.enc == None and self.mode == 'train':
+                self.enc = OneHotEncoder(handle_unknown='ignore')
                 self.naive_y = self.enc.fit_transform(np.array(self.label).reshape(-1, 1)).toarray()
             else:
                 self.naive_y = self.enc.transform(np.array(self.label).reshape(-1, 1)).toarray()
@@ -126,7 +132,27 @@ class dataset:
         file.close()
         self.__dict__.update(tmp_dict)
 
-    def save_pkl(self, file_path):
-        file = open(file_path, 'wb')
-        pickle.dump(self.__dict__, file, 2)
-        file.close()
+    def save_pkl(self, file_name):
+        file_path = DATA_PATH + '/result/dataset/' + file_name + '.pkl'
+        pkl_file = open(file_path, 'wb')
+        pickle.dump(self.__dict__, pkl_file, 2)
+        pkl_file.close()
+
+    def convert_to_binary_label(self, target_label):
+        for idx, label in enumerate(self.label):
+            if label == target_label:
+                self.label[idx] = 1
+            else:
+                self.label[idx] = 0
+
+
+def generate_test_users(num_extract, file_name='user_group_relation'):
+    file_path = DATA_PATH + file_name + '.csv'
+    label_df = pd.read_csv(file_path)
+
+    group_label = label_df.groupby('Group_ID')
+    test_users = []
+    for group_id in group_label.groups.keys():
+        users = group_label.get_group(group_id).groupby('User_ID').count().Group_ID.sort_values(ascending=False)[:num_extract]
+        test_users.extend(users.index.values)
+    return test_users
