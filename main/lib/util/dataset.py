@@ -85,6 +85,7 @@ class dataset:
                 self.naive_X = self.input
         else:
             self.naive_X = self.concat_input_data()
+            self.is_concat = True
 
     def split_dataset(self, test_size=0.3, concat=True, one_hot=False):
         if len(self.input['BI']) != self.data_size or len(self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
@@ -144,6 +145,21 @@ class dataset:
                 self.label[idx] = 1
             else:
                 self.label[idx] = 0
+
+    def convert_to_unique_dataset(self, target_label, concat=True, one_hot=False, is_split=False, test_size=0.3):
+        self.generate_naive_dataset(concat, one_hot)
+        unique_dataset = []
+        unique_label = []
+        for idx, label in enumerate(self.naive_y):
+            if label == target_label:
+                unique_dataset.append(self.naive_X[idx])
+                unique_label.append(label)
+
+        self.naive_X = np.array(unique_dataset)
+        self.naive_y = np.array(unique_label)
+        if is_split:
+            self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.naive_X, self.naive_y,
+                                                                                    test_size=test_size, random_state=0)
 
 
 def generate_test_users(num_extract, file_name='user_group_relation'):

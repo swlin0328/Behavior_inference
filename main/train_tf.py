@@ -40,6 +40,7 @@ def train_pipeline():
     validate_f1, test_f1 = train_model(training_data, validating_data, testing_data)
     return test_f1
 
+"""
 def create_useful_features():
     current_features = extract_features_name('template')[3:28]
     source_path = DATA_PATH + 'template.csv'
@@ -74,6 +75,7 @@ def create_useful_features():
     print(useful_attr)
     print('=============== ' + ' recorded metrics ' + ' ===============')
     print(record_metrics)
+"""
 
 def search_useful_features():
     current_features = set(extract_features_name('template')[3:])

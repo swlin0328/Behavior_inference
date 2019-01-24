@@ -32,17 +32,18 @@ TEST_USERS_PER_GROUP = None
 DATA_PATH = None
 
 def main():
+    target_group_idx = 1
+
     init_config()
     num_group = get_num_group()
-    search_useful_features(num_group)
+    search_useful_features(target_group_idx, num_group)
 
 
-def train_pipeline(num_group):
+def train_pipeline(target_group_idx, num_group):
     model_score = []
-    for idx in range(num_group):
-        if idx > 0:
-            break
-        target_label = idx + 1
+    for target_label in range(num_group):
+        if target_label != target_group_idx:
+            continue
         print('=============== model_' + str(target_label) + ' training ===============')
         training_data, testing_data = init_dataset(num_group, target_label, load_data=False)
         model = train_model(training_data)
@@ -56,11 +57,11 @@ def train_pipeline(num_group):
     return model_score
 
 
-def search_useful_features(num_group):
+def search_useful_features(target_group_idx, num_group):
     current_features = set(extract_features_name('template')[3:])
     drop_cols = set()
     drop_features(source_name='template', target_name='user_info', drop_feature=drop_cols)
-    original_acc = train_pipeline(num_group)
+    original_acc = train_pipeline(target_group_idx, num_group)
     record_metrics = [original_acc[0]]
     record_drop_features = ['None']
     while True:
@@ -73,7 +74,7 @@ def search_useful_features(num_group):
             print(temp_drop)
 
             drop_features(source_name='template', target_name='user_info', drop_feature=temp_drop)
-            test_acc = train_pipeline(num_group)
+            test_acc = train_pipeline(target_group_idx, num_group)
             temp_metrics.append(test_acc[0])
             temp_features.append(col)
 

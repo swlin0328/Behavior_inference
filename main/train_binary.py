@@ -33,18 +33,19 @@ TRAINING_DATA = None
 TEST_USERS_PER_GROUP = None
 
 def main():
+    target_group_idx = 1
+
     parse_args()
     init_config()
     num_group = get_num_group()
     enc = init_binary_encoder()
-    search_useful_features(num_group, enc)
+    search_useful_features(target_group_idx, num_group, enc)
 
-def train_pipeline(num_group, enc):
+def train_pipeline(target_group_idx, num_group, enc):
     model_score = []
-    for idx in range(num_group):
-        if idx > 0:
-            break
-        target_label = idx + 1
+    for target_label in range(num_group):
+        if target_label != target_group_idx:
+            continue
         print('=============== model_' + str(target_label) + ' training ===============')
         tf.reset_default_graph()
         training_data, validating_data, testing_data = init_dataset(num_group, target_label, enc, load_data=False)
@@ -52,11 +53,11 @@ def train_pipeline(num_group, enc):
         model_score.append(test_f1)
     return model_score
 
-def search_useful_features(num_group, enc):
+def search_useful_features(target_group_idx, num_group, enc):
     current_features = set(extract_features_name('template')[3:])
     drop_cols = set()
     drop_features(source_name='template', target_name='user_info', drop_feature=drop_cols)
-    original_acc = train_pipeline(num_group, enc)
+    original_acc = train_pipeline(target_group_idx, num_group, enc)
     record_metrics = [original_acc[0]]
     record_drop_features = ['None']
     while True:
@@ -70,7 +71,7 @@ def search_useful_features(num_group, enc):
             print(temp_drop)
 
             drop_features(source_name='template', target_name='user_info', drop_feature=temp_drop)
-            test_acc = train_pipeline(num_group, enc)
+            test_acc = train_pipeline(target_group_idx, num_group, enc)
             temp_metrics.append(test_acc[0])
             temp_features.append(col)
 
