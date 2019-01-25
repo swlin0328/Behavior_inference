@@ -32,11 +32,12 @@ TEST_USERS_PER_GROUP = None
 DATA_PATH = None
 
 def main():
-    target_group_idx = 1
+    target_group_idx = 0
 
     init_config()
     num_group = get_num_group()
-    search_useful_features(target_group_idx, num_group)
+    train_pipeline(target_group_idx, num_group)
+    #search_useful_features(target_group_idx, num_group)
 
 
 def train_pipeline(target_group_idx, num_group):

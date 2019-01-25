@@ -33,13 +33,14 @@ TRAINING_DATA = None
 TEST_USERS_PER_GROUP = None
 
 def main():
-    target_group_idx = 1
+    target_group_idx = 0
 
     parse_args()
     init_config()
     num_group = get_num_group()
     enc = init_binary_encoder()
-    search_useful_features(target_group_idx, num_group, enc)
+    train_pipeline(target_group_idx, num_group, enc)
+    #search_useful_features(target_group_idx, num_group, enc)
 
 def train_pipeline(target_group_idx, num_group, enc):
     model_score = []

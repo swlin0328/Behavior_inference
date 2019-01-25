@@ -2,16 +2,16 @@
 # -*- coding: utf-8 -*-
 import configparser
 import pandas as pd
-from lib.model.autoencoder import build_model
+from lib.model.keras_autoencoder import build_model
 from lib.util.dataset import dataset, generate_test_users
 from lib.util.preprocess import drop_features, extract_features_name, feature_engineering
-from sklearn.metrics import f1_score, accuracy_score
 from keras.models import load_model
 import ast
 import warnings
 import argparse
 import os
 import numpy as np
+from keras import backend as K
 
 warnings.filterwarnings("ignore")
 
@@ -32,42 +32,30 @@ TRAINING_DATA = None
 TEST_USERS_PER_GROUP = None
 
 def main():
-    target_group_idx = 2
+    target_group_idx = 0
 
     parse_args()
     init_config()
     num_group = get_num_group()
-    # search_useful_features(num_group)
+    #search_useful_features(num_group, target_group_idx)
     model, model_score = train_pipeline(num_group, target_group_idx)
-    final_test(num_group, model, model_score, target_group_idx)
+    final_test(model, model_score, target_group_idx)
 
-def final_test(num_group, model, model_score, target_group_idx):
+def final_test(model, model_score, target_group_idx):
     three_test_users_per_groups = generate_test_users(2)
-    for target_group in range(num_group):
-        target_group_dataset = dataset(test_users=three_test_users_per_groups, mode='test', days=TEST_DAYS,
-                                       standardize=False, min_max=True)
-        target_group_dataset.convert_to_unique_dataset(target_label=target_group, is_split=False)
-        predict_group_id(model, model_score[0], target_group_dataset, target_group_idx)
-        #metrics_validation(model, model_score[0], target_group_dataset, target_group_idx)
-
-def predict_group_id(model, threshold, testing_data, target_group_idx):
-    print('===== prediction stages =====')
-    threshold = threshold * 1.5
-    print("Threshold MSE: %.2f \n" % threshold)
-    mse = validation(model, testing_data.naive_X)
-    if mse < threshold:
-        print('These user is belonging to group ' + str(target_group_idx) + ' ...')
-    else:
-        print('These user is belonging to other groups ...')
+    target_group_dataset = dataset(test_users=three_test_users_per_groups, mode='test', days=TEST_DAYS,
+                                   standardize=False, min_max=True)
+    target_group_dataset.generate_naive_dataset(concat=True, one_hot=False)
+    metrics_validation(model, model_score[0], target_group_dataset, target_group_idx)
 
 def metrics_validation(model, threshold, testing_data, target_group_idx):
     print('===== prediction stages =====')
-    threshold = threshold * 1.5
+    threshold = threshold * 2.0
     print("Threshold MSE: %.2f \n" % threshold)
     correct = 0
     for input_data, label in zip(testing_data.naive_X, testing_data.naive_y):
         input_data = np.array([input_data])
-        mse = validation(model, input_data)
+        mse = validation(model, input_data, verbose=0)
         if mse < threshold and label == target_group_idx:
             correct = correct + 1
         elif mse > threshold and label != target_group_idx:
@@ -77,6 +65,7 @@ def metrics_validation(model, threshold, testing_data, target_group_idx):
     print('Accuracy for model_%d = %.2f' % (target_group_idx, acc))
 
 def train_pipeline(num_group, target_group_idx):
+    K.clear_session()
     model_score = []
     for target_label in range(num_group):
         if target_label != target_group_idx:
@@ -87,11 +76,11 @@ def train_pipeline(num_group, target_group_idx):
         model_score.append(test_mse)
     return model, model_score
 
-def search_useful_features(num_group):
+def search_useful_features(num_group, target_group_idx):
     current_features = set(extract_features_name('template')[3:])
     drop_cols = set()
     drop_features(source_name='template', target_name='user_info', drop_feature=drop_cols)
-    original_mse = train_pipeline(num_group)
+    original_mse = train_pipeline(num_group, target_group_idx)
     record_metrics = [original_mse[0]]
     record_drop_features = ['None']
     while True:
@@ -175,12 +164,13 @@ def train(model, training_data, validating_data):
     save_model(model, MODEL_CONFIG)
     print("Training phase finished... \n")
 
-def validation(model, input_X):
-    score = model.evaluate(input_X, input_X, verbose=1)
+def validation(model, input_X, verbose=1):
+    score = model.evaluate(input_X, input_X, verbose=verbose)
     mae = score[1]
     mse = score[2]
-    print("Model validating MAE: %.2f" % mae)
-    print("Model validating MSE: %.2f \n" % mse)
+    if verbose:
+        print("Model validating MAE: %.2f" % mae)
+        print("Model validating MSE: %.2f \n" % mse)
     return mse
 
 def init_config():
@@ -228,7 +218,7 @@ def init_model(input_shape, config, reload=False):
         model = load_model(path)
         print("=== Model restored ===")
     else:
-        model = build_model(input_shape)
+        model = build_model(input_shape, encoding_dim=10)
     print (model.summary())
     return model
 
