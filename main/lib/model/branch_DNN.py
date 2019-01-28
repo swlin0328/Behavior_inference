@@ -21,7 +21,8 @@ def build_model(training_dataset, config_file):
     tf.summary.scalar('loss', cost)
     init = tf.global_variables_initializer()
     config = {'input': input_layer, 'hidden': hidden_layer, 'output': output_layer, 'optimizer': optimizer,
-              'init': init, 'cost': cost, 'model_name': model_config['model']['name'], 'keep_prob': keep_prob, 'batch_size': batch_size}
+              'init': init, 'cost': cost, 'model_name': model_config['model']['name'], 'keep_prob': keep_prob,
+              'batch_size': batch_size}
     return config
 
 def init_input_tensor(training_dataset):

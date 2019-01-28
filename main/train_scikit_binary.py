@@ -111,10 +111,10 @@ def init_dataset(num_group, target_label, load_data):
         testing_data = dataset(pkl_file=test_file_name)
 
     training_data.convert_to_binary_label(target_label)
-    training_data.split_dataset(concat=True, one_hot=False)
+    training_data.split_dataset(is_concat=True, is_one_hot=False)
 
     testing_data.convert_to_binary_label(target_label)
-    testing_data.generate_naive_dataset(concat=True, one_hot=False)
+    testing_data.generate_naive_dataset(is_concat=True, is_one_hot=False)
     return training_data, testing_data
 
 
@@ -128,7 +128,6 @@ def get_num_group(file_name='user_group_relation'):
 
 
 def train_model(training_data):
-    #pipe_lr = Pipeline([('scl', StandardScaler()), ('pca', PCA(n_components=10)), ('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
     pipe_lr = Pipeline([('clf', SVC(kernel='rbf', random_state=0, gamma=0.1, C=10.0))])
 
     print('\n========== Starting training ==========\n')

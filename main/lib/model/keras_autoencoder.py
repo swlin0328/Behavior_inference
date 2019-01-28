@@ -9,9 +9,7 @@ def build_model(input_shape, encoding_dim=10):
     encoded = Dense(encoding_dim * 4, activation='relu')(input_data)
     encoded = Dense(encoding_dim * 2, activation='relu')(encoded)
 
-    encoded = Dense(encoding_dim, activation='relu',
-                    kernel_regularizer=regularizers.l2(0.01),
-                    activity_regularizer=regularizers.l1(0.01))(encoded)
+    encoded = Dense(encoding_dim, activation='relu')(encoded)
 
     decoded = Dense(encoding_dim * 2, activation='relu')(encoded)
     decoded = Dense(encoding_dim * 4, activation='relu')(decoded)

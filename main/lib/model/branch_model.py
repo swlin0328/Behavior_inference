@@ -19,7 +19,8 @@ def build_model(training_dataset, config_file):
         hidden_layer = init_hidden_tensor(data_layer, keep_prob, batch_size)
         output_layer = init_output_tensor(data_layer, hidden_layer)
 
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=data_layer['group_label'], logits=output_layer))
+        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=data_layer['group_label'],
+                                                                      logits=output_layer))
         correct_prediction = tf.equal(tf.argmax(output_layer, 1), tf.argmax(data_layer['group_label'], 1))
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
@@ -34,9 +35,9 @@ def build_model(training_dataset, config_file):
         tf.summary.scalar('loss', cost)
         tf.summary.scalar('accuracy', accuracy)
         init = tf.global_variables_initializer()
-        config = {'input': data_layer, 'hidden': hidden_layer, 'output': output_layer, 'optimizer': train_op, 'init': init,
-                'cost': cost, 'acc': accuracy, 'model_name': model_config['model']['name'], 'keep_prob': keep_prob,
-                'batch_size': batch_size}
+        config = {'input': data_layer, 'hidden': hidden_layer, 'output': output_layer, 'optimizer': train_op,
+                  'init': init, 'cost': cost, 'acc': accuracy, 'model_name': model_config['model']['name'],
+                  'keep_prob': keep_prob, 'batch_size': batch_size}
         return config
 
 

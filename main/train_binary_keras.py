@@ -6,12 +6,12 @@ from lib.model.keras_autoencoder import build_model
 from lib.util.dataset import dataset, generate_test_users
 from lib.util.preprocess import drop_features, extract_features_name, feature_engineering
 from keras.models import load_model
+from keras import backend as K
+import numpy as np
 import ast
 import warnings
 import argparse
 import os
-import numpy as np
-from keras import backend as K
 
 warnings.filterwarnings("ignore")
 
@@ -30,9 +30,10 @@ MODEL_FILE = None
 MODEL_CONFIG = None
 TRAINING_DATA = None
 TEST_USERS_PER_GROUP = None
+PCA_TRANSDUCER = None
 
 def main():
-    target_group_idx = 0
+    target_group_idx = 1
 
     parse_args()
     init_config()
@@ -45,12 +46,14 @@ def final_test(model, model_score, target_group_idx):
     three_test_users_per_groups = generate_test_users(2)
     target_group_dataset = dataset(test_users=three_test_users_per_groups, mode='test', days=TEST_DAYS,
                                    standardize=False, min_max=True)
-    target_group_dataset.generate_naive_dataset(concat=True, one_hot=False)
-    metrics_validation(model, model_score[0], target_group_dataset, target_group_idx)
+    target_group_dataset.generate_naive_dataset(is_concat=True, is_one_hot=False)
+    target_group_dataset.pca_naive_X(PCA_TRANSDUCER)
+    acc = metrics_validation(model, model_score[0], target_group_dataset, target_group_idx)
+    return acc
 
 def metrics_validation(model, threshold, testing_data, target_group_idx):
     print('===== prediction stages =====')
-    threshold = threshold * 2.0
+    threshold = threshold * 1.5
     print("Threshold MSE: %.2f \n" % threshold)
     correct = 0
     for input_data, label in zip(testing_data.naive_X, testing_data.naive_y):
@@ -63,6 +66,7 @@ def metrics_validation(model, threshold, testing_data, target_group_idx):
 
     acc = correct/len(testing_data.naive_X)
     print('Accuracy for model_%d = %.2f' % (target_group_idx, acc))
+    return acc
 
 def train_pipeline(num_group, target_group_idx):
     K.clear_session()
@@ -80,8 +84,9 @@ def search_useful_features(num_group, target_group_idx):
     current_features = set(extract_features_name('template')[3:])
     drop_cols = set()
     drop_features(source_name='template', target_name='user_info', drop_feature=drop_cols)
-    original_mse = train_pipeline(num_group, target_group_idx)
-    record_metrics = [original_mse[0]]
+    model, model_score = train_pipeline(num_group, target_group_idx)
+    acc = final_test(model, model_score, target_group_idx)
+    record_metrics = [acc]
     record_drop_features = ['None']
     while True:
         temp_metrics = []
@@ -93,15 +98,16 @@ def search_useful_features(num_group, target_group_idx):
             print(temp_drop)
 
             drop_features(source_name='template', target_name='user_info', drop_feature=temp_drop)
-            test_mse = train_pipeline(num_group)
-            temp_metrics.append(test_mse[0])
+            model, model_score = train_pipeline(num_group, target_group_idx)
+            acc = final_test(model, model_score, target_group_idx)
+            temp_metrics.append(acc)
             temp_features.append(col)
 
-        best_mse = min(temp_metrics)
-        if best_mse < record_metrics[-1]:
-            best_feature_idx = temp_metrics.index(best_mse)
+        best_acc = max(temp_metrics)
+        if best_acc > record_metrics[-1]:
+            best_feature_idx = temp_metrics.index(best_acc)
             drop_cols.add(temp_features[best_feature_idx])
-            record_metrics.append(best_mse)
+            record_metrics.append(best_acc)
             record_drop_features.append(drop_cols)
             current_features = current_features - drop_cols
         else:
@@ -120,9 +126,11 @@ def get_num_group(file_name='user_group_relation'):
     return num_group
 
 def init_dataset(num_group, target_label, load_data):
+    global PCA_TRANSDUCER
     train_file_name = "original_training_data_" + str(num_group)
     test_file_name = "original_testing_data_" + str(num_group)
     pkl_path = DATA_PATH + 'result/dataset/'
+
     if not os.path.isfile(pkl_path + train_file_name + '.pkl') or not os.path.isfile(
             pkl_path + test_file_name + '.pkl') or not load_data:
         print("\n preparing training dataset...")
@@ -135,9 +143,12 @@ def init_dataset(num_group, target_label, load_data):
         training_data = dataset(pkl_file=train_file_name)
         testing_data = dataset(pkl_file=test_file_name)
 
-    training_data.convert_to_unique_dataset(target_label, is_split=True)
+    training_data.convert_to_unique_label_dataset(target_label, is_pca=True, is_split=True, pca_dim=25)
     validating_data = {'input': training_data.X_test, 'label': training_data.y_test}
-    testing_data.convert_to_unique_dataset(target_label, is_split=False)
+
+    PCA_TRANSDUCER = training_data.get_pca_tranducer()
+    testing_data.convert_to_unique_label_dataset(target_label, is_pca=True, is_split=False,
+                                                 pca_transducer=PCA_TRANSDUCER)
     return training_data, validating_data, testing_data
 
 def train_model(training_data, validating_data, testing_data):
@@ -218,7 +229,7 @@ def init_model(input_shape, config, reload=False):
         model = load_model(path)
         print("=== Model restored ===")
     else:
-        model = build_model(input_shape, encoding_dim=10)
+        model = build_model(input_shape, encoding_dim=3)
     print (model.summary())
     return model
 

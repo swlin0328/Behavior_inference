@@ -120,13 +120,13 @@ def init_dataset(num_group, target_label, enc, load_data):
         testing_data = dataset(pkl_file=test_file_name)
 
     training_data.convert_to_binary_label(target_label)
-    training_data.split_dataset(concat=False, one_hot=True)
+    training_data.split_dataset(is_concat=False, is_one_hot=True)
 
     validating_X, validating_y = training_data.get_non_concate_dataset(training_data.X_test, training_data.y_test)
     validating_data = {'input': validating_X, 'label': validating_y}
 
     testing_data.convert_to_binary_label(target_label)
-    testing_data.generate_naive_dataset(concat=False, one_hot=True)
+    testing_data.generate_naive_dataset(is_concat=False, is_one_hot=True)
     return training_data, validating_data, testing_data
 
 def train_model(training_data, validating_data, testing_data):

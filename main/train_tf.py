@@ -117,7 +117,7 @@ def init_dataset():
     if TRAINING_DATA is None:
         print("\n preparing training dataset...")
         training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS, standardize=False, min_max=True)
-        training_data.split_dataset(concat=False, one_hot=True)
+        training_data.split_dataset(is_concat=False, is_one_hot=True)
         training_data.save_pkl('training_data')
     else:
         training_data = dataset(pkl_file=TRAINING_DATA)
@@ -127,8 +127,9 @@ def init_dataset():
     one_hot_enc = training_data.get_dataprocessor()
 
     print("\n preparing testing dataset...")
-    testing_data = dataset(test_users=TEST_USERS, mode='test', enc=one_hot_enc, days=TEST_DAYS, standardize=False, min_max=True)
-    testing_data.generate_naive_dataset(concat=False, one_hot=True)
+    testing_data = dataset(test_users=TEST_USERS, mode='test', enc=one_hot_enc, days=TEST_DAYS,
+                           standardize=False, min_max=True)
+    testing_data.generate_naive_dataset(is_concat=False, is_one_hot=True)
     return training_data, validating_data, testing_data
 
 def train_model(training_data, validating_data, testing_data):

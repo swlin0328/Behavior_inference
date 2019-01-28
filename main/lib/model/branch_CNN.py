@@ -18,7 +18,8 @@ def build_model(training_dataset, config_file):
         hidden_layer = init_hidden_tensor(data_layer, keep_prob, batch_size)
         output_layer = init_output_tensor(data_layer, hidden_layer)
 
-        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=data_layer['group_label'], logits=output_layer))
+        cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=data_layer['group_label'],
+                                                                      logits=output_layer))
         correct_prediction = tf.equal(tf.argmax(output_layer, 1), tf.argmax(data_layer['group_label'], 1))
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
 
@@ -33,9 +34,9 @@ def build_model(training_dataset, config_file):
         tf.summary.scalar('loss', cost)
         tf.summary.scalar('accuracy', accuracy)
         init = tf.global_variables_initializer()
-        config = {'input': data_layer, 'hidden': hidden_layer, 'output': output_layer, 'optimizer': train_op, 'init': init,
-                'cost': cost, 'acc': accuracy, 'model_name': model_config['model']['name'], 'keep_prob': keep_prob,
-                'batch_size': batch_size}
+        config = {'input': data_layer, 'hidden': hidden_layer, 'output': output_layer, 'optimizer': train_op,
+                  'init': init, 'cost': cost, 'acc': accuracy, 'model_name': model_config['model']['name'],
+                  'keep_prob': keep_prob, 'batch_size': batch_size}
         return config
 
 def init_input_tensor(training_dataset):
@@ -68,7 +69,8 @@ def init_hidden_tensor(data_layer, keep_prob, batch_size):
                 stacked_rnn = [lstm_cell(5, keep_prob) for _ in range(1)]
                 mlstm_cell = tf.contrib.rnn.MultiRNNCell(cells=stacked_rnn, state_is_tuple=True)
                 init_state = mlstm_cell.zero_state(batch_size, dtype=tf.float32)
-                outputs, final_state = tf.nn.dynamic_rnn(mlstm_cell, conv_out, initial_state=init_state, time_major=False)
+                outputs, final_state = tf.nn.dynamic_rnn(mlstm_cell, conv_out,
+                                                         initial_state=init_state, time_major=False)
                 hidden_layer[input_id] = tf.layers.flatten(outputs[:, -1, :])
 
     with tf.variable_scope(name_or_scope='concat_layer', reuse=False):

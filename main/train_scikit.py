@@ -78,11 +78,11 @@ def search_useful_features():
 def init_dataset():
     print("\npreparing training dataset...")
     training_data = dataset(test_users=TEST_USERS, days=TEST_DAYS, standardize=False, min_max=True)
-    training_data.split_dataset(concat=True, one_hot=False)
+    training_data.split_dataset(is_concat=True, is_one_hot=False)
 
     print("\npreparing testing dataset...")
     testing_data = dataset(test_users=TEST_USERS, mode='test', days=TEST_DAYS, standardize=False, min_max=True)
-    testing_data.generate_naive_dataset(concat=True, one_hot=False)
+    testing_data.generate_naive_dataset(is_concat=True, is_one_hot=False)
     return training_data, testing_data
 
 def train_model(training_data):

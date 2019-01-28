@@ -183,7 +183,8 @@ class data_extractor:
             weather_for_weekid = weather_df[(weather_df.index.weekday + 1) == weekid]
             date = pd.unique(weather_for_weekid.index.date)
             for date_idx in date:
-                weather_data = weather_df[weather_df.index.date == date_idx][WEATHER_ATTR].values.reshape([-1], order='F')
+                weather_data = weather_df[weather_df.index.date == date_idx][WEATHER_ATTR].values.reshape([-1],
+                                                                                                          order='F')
                 if self.weather_size == 0:
                     self.weather_size = weather_data.size
                 if not self.is_valid_data(BI_data, tax_data, weather_data):

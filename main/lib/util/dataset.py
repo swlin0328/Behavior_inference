@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 import pickle
 from lib.util.source import data_extractor
+from sklearn.decomposition import PCA
 import configparser
 import math
 
@@ -48,7 +49,8 @@ class dataset:
         self.weather_size = data['weather_size']
         self.data_size = len(self.label)
 
-        if len(self.input['BI']) != self.data_size or len(self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
+        if len(self.input['BI']) != self.data_size or len(
+                self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
             raise ValueError('Illegal dataset size!')
 
     def num_examples(self):
@@ -57,27 +59,25 @@ class dataset:
     def get_dataprocessor(self):
         return self.enc
 
+    def get_pca_tranducer(self):
+        return self.pca
+
     def concat_input_data(self):
         if len(self.concat_input) == 0:
             for idx in range(len(self.input['BI'])):
-                concat_data = np.concatenate([self.input['BI'][idx], self.input['tax'][idx], self.input['weather'][idx]], axis=0)
+                concat_data = np.concatenate([self.input['BI'][idx], self.input['tax'][idx],
+                                              self.input['weather'][idx]], axis=0)
                 self.concat_input.append(concat_data)
         return self.concat_input
 
-    def generate_naive_dataset(self, concat=True, one_hot=False):
+    def generate_naive_dataset(self, is_concat=True, is_one_hot=False):
         if self.data_size == 0:
             raise ValueError('Empty dataset!')
+        self.generate_naive_label(is_one_hot)
+        self.generate_naive_X(is_concat)
 
-        if one_hot:
-            if self.enc == None and self.mode == 'train':
-                self.enc = OneHotEncoder(handle_unknown='ignore')
-                self.naive_y = self.enc.fit_transform(np.array(self.label).reshape(-1, 1)).toarray()
-            else:
-                self.naive_y = self.enc.transform(np.array(self.label).reshape(-1, 1)).toarray()
-        else:
-            self.naive_y = self.label
-
-        if not concat:
+    def generate_naive_X(self, is_concat):
+        if not is_concat:
             self.naive_X = []
             for idx in range(len(self.input['BI'])):
                 self.naive_X.append([self.input['BI'][idx], self.input['tax'][idx], self.input['weather'][idx]])
@@ -87,14 +87,25 @@ class dataset:
             self.naive_X = self.concat_input_data()
             self.is_concat = True
 
-    def split_dataset(self, test_size=0.3, concat=True, one_hot=False):
-        if len(self.input['BI']) != self.data_size or len(self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
+    def generate_naive_label(self, is_one_hot):
+        if is_one_hot:
+            if self.enc == None and self.mode == 'train':
+                self.enc = OneHotEncoder(handle_unknown='ignore')
+                self.naive_y = self.enc.fit_transform(np.array(self.label).reshape(-1, 1)).toarray()
+            else:
+                self.naive_y = self.enc.transform(np.array(self.label).reshape(-1, 1)).toarray()
+        else:
+            self.naive_y = self.label
+
+    def split_dataset(self, test_size=0.3, is_concat=True, is_one_hot=False):
+        if len(self.input['BI']) != self.data_size or len(
+                self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
             raise ValueError('Illegal dataset size!')
 
-        self.generate_naive_dataset(concat, one_hot)
+        self.generate_naive_dataset(is_concat, is_one_hot)
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.naive_X, self.naive_y,
                                                                                 test_size=test_size, random_state=0)
-        self.is_concat = concat
+        self.is_concat = is_concat
 
     def next_train_batch(self, batch_size):
         self.batch_idx = self.batch_idx + batch_size
@@ -107,7 +118,6 @@ class dataset:
 
         batch_x = self.X_train[self.batch_idx - batch_size:self.batch_idx]
         batch_y = self.y_train[self.batch_idx - batch_size:self.batch_idx]
-
         if self.is_concat:
             return batch_x, batch_y
         else:
@@ -117,7 +127,6 @@ class dataset:
         datasize = len(input_x)
         if len(label_y) != datasize:
             raise ValueError('Invalid dataset!')
-
         x_BI = []
         x_tax = []
         x_weather = []
@@ -146,8 +155,9 @@ class dataset:
             else:
                 self.label[idx] = 0
 
-    def convert_to_unique_dataset(self, target_label, concat=True, one_hot=False, is_split=False, test_size=0.3):
-        self.generate_naive_dataset(concat, one_hot)
+    def convert_to_unique_label_dataset(self, target_label, is_concat=True, is_one_hot=False, is_pca=False,
+                                        is_split=False, test_size=0.3, pca_transducer=None, pca_dim=50):
+        self.generate_naive_dataset(is_concat, is_one_hot)
         unique_dataset = []
         unique_label = []
         for idx, label in enumerate(self.naive_y):
@@ -157,9 +167,19 @@ class dataset:
 
         self.naive_X = np.array(unique_dataset)
         self.naive_y = np.array(unique_label)
+        if is_pca:
+            self.pca_naive_X(pca_transducer, pca_dim)
         if is_split:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.naive_X, self.naive_y,
                                                                                     test_size=test_size, random_state=0)
+
+    def pca_naive_X(self, pca_transducer, pca_dim=50):
+        self.pca = pca_transducer
+        if self.pca is None:
+            self.pca = PCA(n_components=pca_dim)
+            self.naive_X = self.pca.fit_transform(self.naive_X)
+        else:
+            self.naive_X = self.pca.transform(self.naive_X)
 
 
 def generate_test_users(num_extract, file_name='user_group_relation'):
@@ -169,6 +189,7 @@ def generate_test_users(num_extract, file_name='user_group_relation'):
     group_label = label_df.groupby('Group_ID')
     test_users = []
     for group_id in group_label.groups.keys():
-        users = group_label.get_group(group_id).groupby('User_ID').count().Group_ID.sort_values(ascending=False)[:num_extract]
+        users = group_label.get_group(group_id).groupby('User_ID').count().Group_ID.sort_values(
+            ascending=False)[:num_extract]
         test_users.extend(users.index.values)
     return test_users
