@@ -81,3 +81,16 @@ def feature_engineering(df, attribute_1, attribute_2, operator):
 
     df[new_feature] = result
     return df, new_feature
+
+
+def find_location(district):
+    path = DATA_PATH + 'country_hashtable.csv'
+
+    map_rule = pd.read_csv(path)
+    location_rule = map_rule[['行政區', '中心點緯度', '中心點經度']]
+    location_rule = location_rule.set_index('行政區')
+
+    longitude = location_rule.loc[district, '中心點經度']
+    latitude = location_rule.loc[district, '中心點緯度']
+    location = {'經度':longitude, '緯度':latitude}
+    return location

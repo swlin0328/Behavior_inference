@@ -33,7 +33,7 @@ TEST_USERS_PER_GROUP = None
 PCA_TRANSDUCER = None
 
 def main():
-    target_group_idx = 1
+    target_group_idx = 2
 
     parse_args()
     init_config()
@@ -71,6 +71,7 @@ def metrics_validation(model, threshold, testing_data, target_group_idx):
 def train_pipeline(num_group, target_group_idx):
     K.clear_session()
     model_score = []
+    model = None
     for target_label in range(num_group):
         if target_label != target_group_idx:
             continue

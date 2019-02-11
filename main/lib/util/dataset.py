@@ -1,6 +1,5 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from sklearn import datasets
 from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 import pandas as pd
@@ -9,7 +8,6 @@ import pickle
 from lib.util.source import data_extractor
 from sklearn.decomposition import PCA
 import configparser
-import math
 
 DIR_FILE = '../data/config/dir_path.ini'
 DIR_CONFIG = configparser.ConfigParser()
@@ -34,6 +32,7 @@ class dataset:
         self.normalized = False
         self.mode = mode
         self.enc = enc
+        self.indices = None
 
         self.init_datasource(cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, min_max)
 
@@ -112,9 +111,10 @@ class dataset:
         if self.y_train is None or self.X_train is None:
             print('Empty training dataset!')
             return
-
+        if self.indices is None:
+            self.init_batch_idx()
         if self.batch_idx > len(self.X_train):
-            self.batch_idx = batch_size
+            self.reset_batch_idx(batch_size)
 
         batch_x = self.X_train[self.batch_idx - batch_size:self.batch_idx]
         batch_y = self.y_train[self.batch_idx - batch_size:self.batch_idx]
@@ -122,6 +122,14 @@ class dataset:
             return batch_x, batch_y
         else:
             return self.get_non_concate_dataset(batch_x, batch_y)
+
+    def reset_batch_idx(self, batch_size):
+        self.batch_idx = batch_size
+        np.random.shuffle(self.indices)
+
+    def init_batch_idx(self):
+        self.indices = np.arange(len(self.X_train))
+        np.random.shuffle(self.indices)
 
     def get_non_concate_dataset(self, input_x, label_y):
         datasize = len(input_x)
