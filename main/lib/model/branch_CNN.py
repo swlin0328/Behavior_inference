@@ -7,8 +7,7 @@ from configobj import ConfigObj
 import tensorflow as tf
 
 def build_model(training_dataset, config_file):
-    with tf.device('/gpu:0'):
-        tf.reset_default_graph()
+    with tf.device("/job:worker/task:0"):
         model_config = ConfigObj(config_file)
         keep_prob = tf.placeholder(tf.float32, [])
         batch_size = tf.placeholder(tf.int32, [])

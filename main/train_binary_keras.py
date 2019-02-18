@@ -7,13 +7,15 @@ from lib.util.dataset import dataset, generate_test_users
 from lib.util.preprocess import drop_features, extract_features_name, feature_engineering
 from keras.models import load_model
 from keras import backend as K
+import tensorflow as tf
 import numpy as np
 import ast
 import warnings
 import argparse
 import os
-
 warnings.filterwarnings("ignore")
+sess = tf.Session("grpc://192.111.1.111:2222")
+K.set_session(sess)
 
 DIR_FILE = '../data/config/dir_path.ini'
 DIR_CONFIG = configparser.ConfigParser()
@@ -33,7 +35,7 @@ TEST_USERS_PER_GROUP = None
 PCA_TRANSDUCER = None
 
 def main():
-    target_group_idx = 2
+    target_group_idx = 0
 
     parse_args()
     init_config()
@@ -230,7 +232,7 @@ def init_model(input_shape, config, reload=False):
         model = load_model(path)
         print("=== Model restored ===")
     else:
-        model = build_model(input_shape, encoding_dim=3)
+        model = build_model(input_shape, encoding_dim=6)
     print (model.summary())
     return model
 
