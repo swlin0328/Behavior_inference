@@ -1,23 +1,20 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from sklearn.cross_validation import train_test_split
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 import pandas as pd
 import numpy as np
 import pickle
-from lib.util.source import data_extractor
+from ..util.source import data_extractor
 from sklearn.decomposition import PCA
 import configparser
-
-DIR_FILE = '../data/config/dir_path.ini'
-DIR_CONFIG = configparser.ConfigParser()
-DIR_CONFIG.read(DIR_FILE)
-DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
+from ..config.config import DATA_PATH
 
 class dataset:
-    def __init__(self, pkl_file=None, cluster_file='user_group_relation.csv', BI_file='user_info.csv',
+    def __init__(self, config, pkl_file=None, cluster_file='user_group_relation.csv', user_file='user_info.csv',
                  tax_file='city_tax.csv', weather_file='city_weather.csv', test_users=None, days=30,
                  mode='train', enc=None, standardize=False, min_max=False):
+        self.config = config
         if pkl_file != None:
             path = DATA_PATH + '/result/dataset/'
             self.filename = path + pkl_file + '.pkl'
@@ -32,23 +29,27 @@ class dataset:
         self.normalized = False
         self.mode = mode
         self.enc = enc
+        self.pca = None
         self.indices = None
 
-        self.init_datasource(cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, min_max)
+        self.init_datasource(self.config,
+                             cluster_file, user_file, tax_file, weather_file,
+                             test_users, days, mode, standardize, min_max)
 
-    def init_datasource(self, cluster_file, BI_file, tax_file, weather_file, test_users, days, mode, standardize, min_max):
-        data_source = data_extractor(cluster_file, BI_file, tax_file, weather_file, mode=mode)
+    def init_datasource(self, config,
+                        cluster_file, user_file, tax_file, weather_file, test_users, days, mode, standardize, min_max):
+        data_source = data_extractor(config, cluster_file, user_file, tax_file, weather_file, mode=mode)
         data = data_source.init_with_csv(test_users, days, standardize, min_max)
-        self.input['BI'] = data['BI']
+        self.input['user'] = data['user']
         self.input['tax'] = data['tax']
         self.input['weather'] = data['weather']
         self.label = data['group_label']
-        self.BI_size = data['BI_size']
+        self.user_size = data['user_size']
         self.tax_size = data['tax_size']
         self.weather_size = data['weather_size']
         self.data_size = len(self.label)
 
-        if len(self.input['BI']) != self.data_size or len(
+        if len(self.input['user']) != self.data_size or len(
                 self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
             raise ValueError('Illegal dataset size!')
 
@@ -63,8 +64,8 @@ class dataset:
 
     def concat_input_data(self):
         if len(self.concat_input) == 0:
-            for idx in range(len(self.input['BI'])):
-                concat_data = np.concatenate([self.input['BI'][idx], self.input['tax'][idx],
+            for idx in range(len(self.input['user'])):
+                concat_data = np.concatenate([self.input['user'][idx], self.input['tax'][idx],
                                               self.input['weather'][idx]], axis=0)
                 self.concat_input.append(concat_data)
         return self.concat_input
@@ -76,15 +77,18 @@ class dataset:
         self.generate_naive_X(is_concat)
 
     def generate_naive_X(self, is_concat):
-        if not is_concat:
-            self.naive_X = []
-            for idx in range(len(self.input['BI'])):
-                self.naive_X.append([self.input['BI'][idx], self.input['tax'][idx], self.input['weather'][idx]])
-            if self.mode == 'test':
-                self.naive_X = self.input
-        else:
+        if is_concat:
             self.naive_X = self.concat_input_data()
             self.is_concat = True
+            return
+
+        self.naive_X = []
+        if self.mode == 'test':
+            self.naive_X = self.input
+            return
+        else:
+            for idx in range(len(self.input['user'])):
+                self.naive_X.append([self.input['user'][idx], self.input['tax'][idx], self.input['weather'][idx]])
 
     def generate_naive_label(self, is_one_hot):
         if is_one_hot:
@@ -96,15 +100,16 @@ class dataset:
         else:
             self.naive_y = self.label
 
-    def split_dataset(self, test_size=0.3, is_concat=True, is_one_hot=False):
-        if len(self.input['BI']) != self.data_size or len(
+    def split_dataset(self, test_size=0.1):
+        if self.is_concat == False:
+            raise ValueError('Dataset is not concat format!')
+
+        if len(self.input['user']) != self.data_size or len(
                 self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
             raise ValueError('Illegal dataset size!')
 
-        self.generate_naive_dataset(is_concat, is_one_hot)
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.naive_X, self.naive_y,
                                                                                 test_size=test_size, random_state=0)
-        self.is_concat = is_concat
 
     def next_train_batch(self, batch_size):
         self.batch_idx = self.batch_idx + batch_size
@@ -135,14 +140,14 @@ class dataset:
         datasize = len(input_x)
         if len(label_y) != datasize:
             raise ValueError('Invalid dataset!')
-        x_BI = []
+        x_user = []
         x_tax = []
         x_weather = []
         for idx in range(datasize):
-            x_BI.append(input_x[idx][0])
+            x_user.append(input_x[idx][0])
             x_tax.append(input_x[idx][1])
             x_weather.append(input_x[idx][2])
-        return {'BI': x_BI, 'tax': x_tax, 'weather': x_weather}, label_y
+        return {'user': x_user, 'tax': x_tax, 'weather': x_weather}, label_y
 
     def load_pkl(self):
         file = open(self.filename, 'rb')
@@ -163,25 +168,22 @@ class dataset:
             else:
                 self.label[idx] = 0
 
-    def convert_to_unique_label_dataset(self, target_label, is_concat=True, is_one_hot=False, is_pca=False,
-                                        is_split=False, test_size=0.3, pca_transducer=None, pca_dim=50):
-        self.generate_naive_dataset(is_concat, is_one_hot)
+    def convert_to_unique_label_dataset(self, target_label, is_split=False, test_size=0.1):
         unique_dataset = []
         unique_label = []
         for idx, label in enumerate(self.naive_y):
             if label == target_label:
                 unique_dataset.append(self.naive_X[idx])
                 unique_label.append(label)
-
         self.naive_X = np.array(unique_dataset)
         self.naive_y = np.array(unique_label)
-        if is_pca:
-            self.pca_naive_X(pca_transducer, pca_dim)
+
         if is_split:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(self.naive_X, self.naive_y,
                                                                                     test_size=test_size, random_state=0)
 
-    def pca_naive_X(self, pca_transducer, pca_dim=50):
+    def pca_naive_X(self, is_concat=True, is_one_hot=False, pca_transducer=None, pca_dim=50):
+        self.generate_naive_dataset(is_concat, is_one_hot)
         self.pca = pca_transducer
         if self.pca is None:
             self.pca = PCA(n_components=pca_dim)
@@ -189,15 +191,3 @@ class dataset:
         else:
             self.naive_X = self.pca.transform(self.naive_X)
 
-
-def generate_test_users(num_extract, file_name='user_group_relation'):
-    file_path = DATA_PATH + file_name + '.csv'
-    label_df = pd.read_csv(file_path)
-
-    group_label = label_df.groupby('Group_ID')
-    test_users = []
-    for group_id in group_label.groups.keys():
-        users = group_label.get_group(group_id).groupby('User_ID').count().Group_ID.sort_values(
-            ascending=False)[:num_extract]
-        test_users.extend(users.index.values)
-    return test_users

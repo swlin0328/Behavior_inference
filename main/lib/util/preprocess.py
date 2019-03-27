@@ -5,11 +5,7 @@ import numpy as np
 import datetime
 import math
 import configparser
-
-DIR_FILE = '../data/config/dir_path.ini'
-DIR_CONFIG = configparser.ConfigParser()
-DIR_CONFIG.read(DIR_FILE)
-DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
+from ..config.config import DATA_PATH
 
 def min_max(df_group, attr, max_dict):
     group_key = df_group.name
@@ -94,3 +90,25 @@ def find_location(district):
     latitude = location_rule.loc[district, '中心點緯度']
     location = {'經度':longitude, '緯度':latitude}
     return location
+
+
+def get_num_group(file_name='user_group_relation'):
+    file_path = DATA_PATH + file_name + '.csv'
+    label_df = pd.read_csv(file_path)
+
+    group_label = label_df.groupby('Group_ID')
+    num_group = len(group_label.groups.keys())
+    return num_group
+
+def generate_test_users(num_extract, file_name='user_group_relation'):
+    file_path = DATA_PATH + file_name + '.csv'
+    label_df = pd.read_csv(file_path)
+    num_extract = int(num_extract)
+
+    group_label = label_df.groupby('Group_ID')
+    test_users = []
+    for group_id in group_label.groups.keys():
+        users = group_label.get_group(group_id).groupby('User_ID').count().Group_ID.sort_values(
+            ascending=False)[:num_extract]
+        test_users.extend(users.index.values)
+    return test_users

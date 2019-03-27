@@ -2,38 +2,27 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
-import configparser
 import datetime
-import ast
 from tqdm import tqdm
-from lib.util.preprocess import min_max, normalize, standardization, median_filter
-
-DIR_FILE = '../data/config/dir_path.ini'
-DIR_CONFIG = configparser.ConfigParser()
-DIR_CONFIG.read(DIR_FILE)
-DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
-
-ATTR_FILE = '../data/config/infer_attr.ini'
-ATTR_CONFIG = configparser.ConfigParser()
-ATTR_CONFIG.read(ATTR_FILE)
-WEATHER_ATTR = ast.literal_eval(ATTR_CONFIG['weather']['attr'])
-TAX_ATTR = ast.literal_eval(ATTR_CONFIG['tax']['attr'])
+from ..util.preprocess import min_max, normalize, standardization, median_filter
+from ..config.config import DATA_PATH, WEATHER_ATTR, TAX_ATTR, ATTR_CONFIG
 
 class data_extractor:
-    def __init__(self, cluster_file='user_group_relation.csv', BI_file='user_info.csv',
+    def __init__(self, config, cluster_file='user_group_relation.csv', user_file='user_info.csv',
                  tax_file='city_tax.csv', weather_file='city_weather.csv', mode='train'):
+        self.config = config
         self.mode = mode
         self.cluster_path = DATA_PATH + cluster_file
-        self.BI_path = DATA_PATH + BI_file
+        self.user_path = DATA_PATH + user_file
         self.tax_path = DATA_PATH + tax_file
         self.weather_path = DATA_PATH + weather_file
 
         self.split_dataset_by_user = True
-        self.BI_size = 0
+        self.user_size = 0
         self.tax_size = 0
         self.weather_size = 0
 
-        self.BI_max = {'min': [],
+        self.user_max = {'min': [],
                        'min_max': []}
         self.tax_max = {}
         self.tax_mean = {}
@@ -46,7 +35,7 @@ class data_extractor:
                             'Region': {}}
         self.weather_city_avg = {}
 
-        self.input_BI = []
+        self.input_user = []
         self.input_tax = []
         self.input_weather = []
         self.label = []
@@ -59,29 +48,29 @@ class data_extractor:
             self.split_dataset_by_user = False
 
         self.extract_cluster_df()
-        self.extract_BI_df(test_users)
+        self.extract_user_df(test_users)
         self.extract_tax_df(is_standardize, is_min_max)
         self.extract_weather_df(is_standardize, is_min_max, days)
 
         self.generate_dataset_with_csv()
         self.save_statistics_result()
 
-        data_source = {'BI': self.input_BI, 'tax': self.input_tax, 'weather': self.input_weather, 'group_label': self.label,
-                       'BI_size': self.BI_size, 'tax_size': self.tax_size, 'weather_size': self.weather_size}
+        data_source = {'user': self.input_user, 'tax': self.input_tax, 'weather': self.input_weather, 'group_label': self.label,
+                       'user_size': self.user_size, 'tax_size': self.tax_size, 'weather_size': self.weather_size}
         return data_source
 
     def extract_cluster_df(self):
         cluster_df = pd.read_csv(self.cluster_path)
         self.get_group_and_key(cluster_df, 'cluster', 'User_ID')
 
-    def extract_BI_df(self, test_users):
-        #drop_cols = ['User_ID', 'City', 'Region']
-        BI_df = pd.read_csv(self.BI_path)
-        BI_df = BI_df.set_index(BI_df['User_ID'])
-        #BI_df = normalize(BI_df, drop_cols, self.BI_max)
+    def extract_user_df(self, test_users):
+        drop_cols = ['User_ID', 'City', 'Region']
+        user_df = pd.read_csv(self.user_path)
+        user_df = user_df.set_index(user_df['User_ID'])
+        user_df = normalize(user_df, drop_cols, self.user_max)
         if self.split_dataset_by_user:
-            BI_df = self.select_dataset_by_user(BI_df, test_users)
-        self.get_group_and_key(BI_df, 'BI', 'User_ID')
+            user_df = self.select_dataset_by_user(user_df, test_users)
+        self.get_group_and_key(user_df, 'user', 'User_ID')
 
     def extract_tax_df(self, is_standardize, is_min_max):
         tax_df = pd.read_csv(self.tax_path)
@@ -135,42 +124,42 @@ class data_extractor:
             weather_df = weather_df[weather_df.index.date > split_date]
         return weather_df
 
-    def select_dataset_by_user(self, BI_df, test_users):
+    def select_dataset_by_user(self, user_df, test_users):
         if self.mode == 'train':
-            BI_df = BI_df[[idx not in test_users for idx in BI_df.index]]
+            user_df = user_df[[idx not in test_users for idx in user_df.index]]
         else:
-            BI_df = BI_df[[idx in test_users for idx in BI_df.index]]
-        return BI_df
+            user_df = user_df[[idx in test_users for idx in user_df.index]]
+        return user_df
 
     def generate_dataset_with_csv(self):
-        for user in tqdm(self.group_dict['Group_key']['BI'], ncols=60):
+        for user in tqdm(self.group_dict['Group_key']['user'], ncols=60):
             if user not in self.group_dict['Group_key']['cluster']:
                 continue
 
-            BI_data, tax_data, location = self.extract_user_data(user)
+            user_data, tax_data, location = self.extract_user_data(user)
             location['region'] = location['region'].strip('區')
             self.group_dict['Group']['daily_group'] = self.group_dict['Group']['cluster'].get_group(user).groupby('Week_ID')
             self.group_dict['Group_key']['daily_group'] = self.group_dict['Group']['daily_group'].groups.keys()
-            self.combine_user_data_with_daily_weather(BI_data, tax_data, location)
+            self.combine_user_data_with_daily_weather(user_data, tax_data, location)
 
     def extract_user_data(self, user):
-        target_user = self.group_dict['Group']['BI'].get_group(user)
+        target_user = self.group_dict['Group']['user'].get_group(user)
         city = target_user.values[0][1]
         region = target_user.values[0][2]
 
         taget_region_tax = self.group_dict['Group']['tax'].get_group(region)
         taget_region_tax = taget_region_tax.set_index(['村里'])
 
-        BI_data = target_user.values[0][4:]
+        user_data = target_user.values[0][4:]
         tax_data = taget_region_tax.loc['合計', TAX_ATTR].values.reshape([-1], order='F')
 
-        if self.BI_size == 0:
-            self.BI_size = BI_data.size
+        if self.user_size == 0:
+            self.user_size = user_data.size
         if self.tax_size == 0:
             self.tax_size = tax_data.size
-        return BI_data, tax_data, {'city': city, 'region': region}
+        return user_data, tax_data, {'city': city, 'region': region}
 
-    def combine_user_data_with_daily_weather(self, BI_data, tax_data, location):
+    def combine_user_data_with_daily_weather(self, user_data, tax_data, location):
         if location['region'] in self.group_dict['Group_key']['weather_region']:
             weather_df = self.group_dict['Group']['weather_region'].get_group(location['region'])
         elif location['city'] in self.group_dict['Group_key']['weather_city']:
@@ -187,11 +176,11 @@ class data_extractor:
                                                                                                           order='F')
                 if self.weather_size == 0:
                     self.weather_size = weather_data.size
-                if not self.is_valid_data(BI_data, tax_data, weather_data):
+                if not self.is_valid_data(user_data, tax_data, weather_data):
                     continue
 
                 group_label = self.group_dict['Group']['daily_group'].get_group(weekid)['Group_ID'].values[0]
-                self.input_BI.append(BI_data)
+                self.input_user.append(user_data)
                 self.input_tax.append(tax_data)
                 self.input_weather.append(weather_data)
                 self.label.append(group_label)
@@ -209,15 +198,15 @@ class data_extractor:
 
         return self.weather_city_avg[location]
 
-    def is_valid_data(self, BI_data, tax_data, weather_data):
-        if BI_data.size != self.BI_size:
+    def is_valid_data(self, user_data, tax_data, weather_data):
+        if user_data.size != self.user_size:
             return False
         if tax_data.size != self.tax_size:
             return False
         if weather_data.size != self.weather_size:
             return False
 
-        if pd.isnull(BI_data).any():
+        if pd.isnull(user_data).any():
             return False
         if pd.isnull(tax_data).any():
             return False
@@ -232,16 +221,16 @@ class data_extractor:
     def save_statistics_result(self, path=None):
         if self.mode == 'train':
             if path is None:
-                path = DATA_PATH + '/result/parameters/statistics.npz'
+                path = DATA_PATH + '/result/parameters/' + self.config['model_name'] + '_statistics.npz'
             tax_array = [self.tax_max, self.tax_mean, self.tax_std]
             weather_array = [self.weather_max, self.weather_mean, self.weather_std]
-            BI_array = [self.BI_max]
-            np.savez(path, tax_array=tax_array, weather_array=weather_array, BI_array=BI_array)
+            user_array = [self.user_max]
+            np.savez(path, tax_array=tax_array, weather_array=weather_array, user_array=user_array)
 
     def load_statistics_result(self, path=None):
         if self.mode == 'test':
             if path is None:
-                path = DATA_PATH + '/result/parameters/statistics.npz'
+                    path = DATA_PATH + '/result/parameters/' + self.config['model_name'] + '_statistics.npz'
 
             statistics = np.load(path)
             self.tax_max = statistics['tax_array'][0]
@@ -250,4 +239,4 @@ class data_extractor:
             self.weather_max = statistics['weather_array'][0]
             self.weather_mean = statistics['weather_array'][1]
             self.weather_std = statistics['weather_array'][2]
-            #self.BI_max = statistics['BI_array'][0]
+            self.user_max = statistics['user_array'][0]

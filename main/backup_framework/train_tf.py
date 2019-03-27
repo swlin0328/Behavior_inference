@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import configparser
 import tensorflow as tf
-from lib.model.branch_CNN import build_model
+from lib.model.branch_DNN import build_model
 from lib.util.dataset import dataset, generate_test_users
 from lib.util.preprocess import drop_features, extract_features_name, feature_engineering
 from sklearn.metrics import f1_score, accuracy_score
@@ -133,7 +133,10 @@ def init_dataset():
     return training_data, validating_data, testing_data
 
 def train_model(training_data, validating_data, testing_data):
-    with tf.Session("grpc://192.168.1.185:2222") as sess:
+    config = tf.ConfigProto()
+    config.log_device_placement = True
+    #with tf.Session("grpc://140.92.170.16:2222", config=config) as sess:
+    with tf.Session(config=config) as sess:
         config = build_model(training_data, MODEL_FILE)
         saver = tf.train.Saver()
         init_model(sess, saver, config, reload=RELOAD)

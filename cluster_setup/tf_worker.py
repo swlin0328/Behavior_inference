@@ -4,7 +4,7 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 import tensorflow as tf
 
-worker_hosts = ["192.168.1.122:2222", "192.168.1.111:2222"]
+worker_hosts = ["111.111.1.111:2222", "111.111.1.111:2222"]
 cluster = tf.train.ClusterSpec({"worker": worker_hosts})
 
 tf.app.flags.DEFINE_string("job_name", "worker", "One of 'ps', 'worker'")

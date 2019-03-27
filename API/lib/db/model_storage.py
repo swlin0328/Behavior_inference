@@ -5,7 +5,7 @@ from time import strftime
 import pymssql
 
 class storage4cluster():
-	def __init__(self, model_name='',  user="", password="", database="dsm", host_address='111.22.33.44', port='2222'):
+	def __init__(self, model_name='',  user="", password="", database="", host_address='111.22.33.44', port='2222'):
 		self.model_name = model_name
 		self.user = user
 		self.password = password
