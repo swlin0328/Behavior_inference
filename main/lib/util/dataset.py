@@ -101,9 +101,6 @@ class dataset:
             self.naive_y = self.label
 
     def split_dataset(self, test_size=0.1):
-        if self.is_concat == False:
-            raise ValueError('Dataset is not concat format!')
-
         if len(self.input['user']) != self.data_size or len(
                 self.input['tax']) != self.data_size or len(self.input['weather']) != self.data_size:
             raise ValueError('Illegal dataset size!')
@@ -190,4 +187,3 @@ class dataset:
             self.naive_X = self.pca.fit_transform(self.naive_X)
         else:
             self.naive_X = self.pca.transform(self.naive_X)
-

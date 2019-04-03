@@ -13,7 +13,7 @@ from ..db.sql_connect import sql_config
 
 class sql4Dataset():
 	def __init__(self, dataset_name, time_config=None, sql_conn=None,
-				 user="", password="", database="", host_address='', port=''):
+				 user="", password="", database="", host_address='', port='1433'):
 		self.sql_config = sql_config(user, password, database, host_address, port, sql_conn)
 		self.dataset_name = dataset_name
 		self.time_config = time_config
@@ -35,19 +35,20 @@ class sql4Dataset():
 		if dataset_id is not None:
 			self.dataset_id = int(dataset_id[0])
 
-	def save2sql(self, pca):
+	def save2sql(self, pca=None, one_hot=None):
 		if not self.chk_dataset_exist():
-			self.insert_dataset(pca)
+			self.insert_dataset(pca, one_hot)
 			self.sql_config.commit()
 		#self.sql_config.disconnect()
 
-	def insert_dataset(self, pca):
-		add_dataset = "INSERT INTO Inference_Dataset (Experiment_Name, Start_Time, End_Time, PCA_Blob, Created_Time)" \
+	def insert_dataset(self, pca, one_hot):
+		add_dataset = "INSERT INTO Inference_Dataset (Experiment_Name, Start_Time, End_Time, Enc_Blob, Created_Time)" \
 					" VALUES (?, ?, ?, ?, ?);"
-		pca_blob = cPickle.dumps(pca)
+		enc = {'PCA': pca, 'One_Hot': one_hot}
+		enc_blob = cPickle.dumps(enc)
 		self.sql_config.cursor.execute(add_dataset, (
 			self.dataset_name, self.time_config['start_time'], self.time_config['end_time'],
-			pca_blob, self.sql_config.created_time))
+			enc_blob, self.sql_config.created_time))
 
 	def read_dataset_info(self):
 		self.sql_config.cursor.execute("SELECT * FROM Inference_Dataset")
@@ -55,15 +56,23 @@ class sql4Dataset():
 		for record in results:
 			print(record)
 
-	def read_pca_blob(self):
-		print('Fetch the target pca blob...')
-		sql_cmd = "SELECT PCA_Blob FROM Inference_Dataset WHERE Dataset_ID = ?"
+	def read_enc_blob(self):
+		print('Fetch the target enc blob...')
+		sql_cmd = "SELECT Enc_Blob FROM Inference_Dataset WHERE Dataset_ID = ?"
 		self.sql_config.cursor.execute(sql_cmd, (self.dataset_id,))
-		pca_blob = self.sql_config.cursor.fetchone()
-		return pca_blob
+		enc_blob = self.sql_config.cursor.fetchone()
+		return enc_blob
 
 	def load_pca_from_sql(self):
 		self.search_dataset()
-		sql_pca = self.read_pca_blob()
-		pca = cPickle.loads(sql_pca[0])
+		sql_enc = self.read_enc_blob()
+		enc = cPickle.loads(sql_enc[0])
+		pca = enc['PCA']
 		return pca
+
+	def load_one_hot_from_sql(self):
+		self.search_dataset()
+		sql_enc = self.read_enc_blob()
+		enc = cPickle.loads(sql_enc[0])
+		one_hot = enc['One_Hot']
+		return one_hot

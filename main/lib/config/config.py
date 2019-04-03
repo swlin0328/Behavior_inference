@@ -20,11 +20,27 @@ DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
 WEATHER_ATTR = ast.literal_eval(ATTR_CONFIG['weather']['attr'])
 TAX_ATTR = ast.literal_eval(ATTR_CONFIG['tax']['attr'])
 
-def set_tf_session(request_config):
+def set_tf_session(config):
     warnings.filterwarnings("ignore")
     K.clear_session()
-    tf_config = tf.ConfigProto()
-    tf_config.log_device_placement = True
-    if request_config['ip_config'] is not None and request_config['ip_config'] != '':
-        sess = tf.Session('grpc://' + request_config['ip_config'], config=tf_config)
+    if config['ip_config'] is not None and config['ip_config'] != '':
+        tf_config = tf.ConfigProto()
+        tf_config.log_device_placement = bool(config['log_device'])
+        sess = tf.Session(config['ip_config'], config=tf_config)
         K.set_session(sess)
+
+def set_attr_config(config):
+    config_path = 'inference/data/config/infer_attr.ini'
+    parser = configparser.ConfigParser()
+    parser.read(config_path)
+    weather_attr = ['Temperature']
+    tax_attr = ['平均數']
+    if config['humidity']:
+        weather_attr.append('Humidity')
+    if config['tax_median']:
+        tax_attr.append('中位數')
+
+    parser.set('weather', 'attr', str(weather_attr))
+    parser.set('tax', 'attr', str(tax_attr))
+    with open(config_path, 'w+') as configfile:
+        parser.write(configfile)

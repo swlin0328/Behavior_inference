@@ -6,6 +6,7 @@ import configparser
 import datetime
 from ..config.config import DATA_PATH
 from sklearn.metrics import f1_score, accuracy_score
+import tensorflow as tf
 
 
 class energy_metrics:
@@ -65,3 +66,20 @@ def predict_binary_label(model, threshold, testing_data, target_group_idx):
         else:
             results.append(-1)
     return results
+
+
+def tf_validation(sess, model_config, input_user, input_tax, input_weather, label_y):
+    predict_y = tf.cast(tf.argmax(model_config['output'], 1), tf.int32, name='predictions')
+    true_y = tf.cast(tf.argmax(label_y, 1), tf.int32, name='true_labels')
+    predict_y, true_y = sess.run([predict_y, true_y],
+                                 feed_dict={model_config['input']['user']: input_user,
+                                            model_config['input']['tax']: input_tax,
+                                            model_config['input']['weather']: input_weather,
+                                            model_config['input']['group_label']: label_y,
+                                            model_config['keep_prob']: 1.0,
+                                            model_config['batch_size']: len(input_user)})
+    validate_acc = accuracy_score(true_y, predict_y)
+    validate_f1 = f1_score(true_y, predict_y, average='macro')
+    print("Model validating Accuracy: %.2f \n" % validate_acc)
+    print("Model validating F1_score: %.2f \n" % validate_f1)
+    return validate_acc, validate_f1

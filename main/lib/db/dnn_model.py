@@ -12,8 +12,8 @@ from ..db.sql_connect import sql_config
 
 
 class sql4Keras():
-	def __init__(self, model_name, customer_group, creator='', sql_conn=None, user="", password="",
-				 database="", host_address='', port='', description=''):
+	def __init__(self, model_name, customer_group, creator='Guest', sql_conn=None, user="", password="",
+				 database="", host_address='', port='1433', description=''):
 		self.sql_config = sql_config(user, password, database, host_address, port, sql_conn)
 		self.model_name = model_name
 		self.customer_group = customer_group
@@ -32,6 +32,7 @@ class sql4Keras():
 		search_id = "SELECT Model_ID FROM Inference_Model WHERE Model_Name = ? AND Customer_Group = ?"
 		self.sql_config.cursor.execute(search_id, (self.model_name, self.customer_group, ))
 		model_id = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
 		if model_id is not None:
 			self.model_id = int(model_id[0])
 
@@ -39,6 +40,7 @@ class sql4Keras():
 		search_id = "SELECT Dataset_ID FROM Inference_Dataset WHERE Experiment_Name = ?"
 		self.sql_config.cursor.execute(search_id, (self.model_name, ))
 		dataset_id = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
 		if dataset_id is not None:
 			self.dataset_id = int(dataset_id[0])
 
@@ -83,6 +85,7 @@ class sql4Keras():
 	def read_model_info(self):
 		self.sql_config.cursor.execute("SELECT * FROM Inference_Model")
 		results = self.sql_config.cursor.fetchall()
+		self.sql_config.commit()
 		for record in results:
 			print(record)
 
@@ -92,6 +95,7 @@ class sql4Keras():
 		self.sql_config.cursor.execute(sql_cmd, (self.model_id,))
 		model_threshold = self.sql_config.cursor.fetchone()
 		model_threshold = float(model_threshold[0])
+		self.sql_config.commit()
 		return model_threshold
 
 	def load_threshold_from_sql(self):
@@ -104,6 +108,7 @@ class sql4Keras():
 		sql_cmd = "SELECT Binary_Data FROM Inference_Blob WHERE Model_ID = ?"
 		self.sql_config.cursor.execute(sql_cmd, (self.model_id,))
 		model_blob = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
 		return model_blob
 
 	def load_model_from_sql(self):
@@ -138,3 +143,59 @@ class sql4Keras():
 		cls = keras.models.Model
 		cls.__getstate__ = __getstate__
 		cls.__setstate__ = __setstate__
+
+
+class sql4Tensorflow():
+	def __init__(self, model_name, customer_group, creator='Guest', sql_conn=None, user="", password="",
+				 database="", host_address='', port='1433', description=''):
+		self.sql_config = sql_config(user, password, database, host_address, port, sql_conn)
+		self.model_name = model_name
+		self.customer_group = customer_group
+		self.model_creator = creator
+		self.description = description
+		self.model_id = None
+
+	def chk_model_exist(self):
+		self.search_model()
+		if self.model_id != None:
+			print('Warning: model_name exist')
+			return True
+		return False
+
+	def search_model(self):
+		search_id = "SELECT Model_ID FROM Inference_Model WHERE Model_Name = ? AND Customer_Group = ?"
+		self.sql_config.cursor.execute(search_id, (self.model_name, self.customer_group, ))
+		model_id = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
+		if model_id is not None:
+			self.model_id = int(model_id[0])
+
+	def search_dataset(self):
+		search_id = "SELECT Dataset_ID FROM Inference_Dataset WHERE Experiment_Name = ?"
+		self.sql_config.cursor.execute(search_id, (self.model_name, ))
+		dataset_id = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
+		if dataset_id is not None:
+			self.dataset_id = int(dataset_id[0])
+
+	def save2sql(self, model_type, model_params, valid_acc, step):
+		if not self.chk_model_exist():
+			self.search_dataset()
+			self.insert_model(model_type, model_params, valid_acc, step)
+			self.sql_config.commit()
+		#self.sql_config.disconnect()
+
+	def insert_model(self, model_type, model_params, valid_acc, step):
+		add_model = "INSERT INTO Inference_Model (Model_Name, Model_Type, Customer_Group, Model_Description, Layers, " \
+					"Accuracy, Params, Step, Dataset, Created_Time, Created_User, Created_Group)" \
+					" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+		self.sql_config.cursor.execute(add_model, (
+			self.model_name, model_type, self.customer_group, self.description, -1, valid_acc, model_params, step,
+			self.dataset_id, self.sql_config.created_time, self.model_creator, 0))
+
+	def read_model_info(self):
+		self.sql_config.cursor.execute("SELECT * FROM Inference_Model")
+		results = self.sql_config.cursor.fetchall()
+		self.sql_config.commit()
+		for record in results:
+			print(record)

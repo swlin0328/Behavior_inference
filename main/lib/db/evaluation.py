@@ -13,7 +13,7 @@ from ..db.sql_connect import sql_config
 
 class sql4Evaluation():
 	def __init__(self, experiment_name, customer_group, sql_conn=None,
-				 user="", password="", database="", host_address='', port=''):
+				 user="", password="", database="", host_address='', port='1433'):
 		self.sql_config = sql_config(user, password, database, host_address, port, sql_conn)
 		self.experiment_name = experiment_name
 		self.customer_group = customer_group
@@ -25,6 +25,7 @@ class sql4Evaluation():
 		search_id = "SELECT Dataset_ID FROM Inference_Dataset WHERE Experiment_Name = ?"
 		self.sql_config.cursor.execute(search_id, (self.experiment_name, ))
 		dataset_id = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
 		if dataset_id is not None:
 			self.dataset_id = int(dataset_id[0])
 
@@ -32,6 +33,7 @@ class sql4Evaluation():
 		search_id = "SELECT Model_ID FROM Inference_Model WHERE Model_Name = ? AND Customer_Group = ?"
 		self.sql_config.cursor.execute(search_id, (self.experiment_name, self.customer_group, ))
 		model_id = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
 		if model_id is not None:
 			self.model_id = int(model_id[0])
 
@@ -50,5 +52,6 @@ class sql4Evaluation():
 	def read_evaluation_info(self):
 		self.sql_config.cursor.execute("SELECT * FROM Inference_Evaluation")
 		results = self.sql_config.cursor.fetchall()
+		self.sql_config.commit()
 		for record in results:
 			print(record)

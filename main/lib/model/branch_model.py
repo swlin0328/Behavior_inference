@@ -7,15 +7,13 @@ from configobj import ConfigObj
 import tensorflow as tf
 
 
-def build_model(training_dataset, config_file):
-    with tf.device('/gpu:0'):
-        tf.reset_default_graph()
-        model_config = ConfigObj(config_file)
+def build_model(temp_dataset, req_config):
+    with tf.device('/cpu:0'):
         keep_prob = tf.placeholder(tf.float32, [])
         batch_size = tf.placeholder(tf.int32, [])
-        learning_rate = float(model_config['train']['learning_rate'])
+        learning_rate = float(req_config['learning_rate']) if 'learning_rate' in req_config.keys() else 0.001
 
-        data_layer = init_input_tensor(training_dataset)
+        data_layer = init_input_tensor(temp_dataset)
         hidden_layer = init_hidden_tensor(data_layer, keep_prob, batch_size)
         output_layer = init_output_tensor(data_layer, hidden_layer)
 
@@ -36,20 +34,16 @@ def build_model(training_dataset, config_file):
         tf.summary.scalar('accuracy', accuracy)
         init = tf.global_variables_initializer()
         config = {'input': data_layer, 'hidden': hidden_layer, 'output': output_layer, 'optimizer': train_op,
-                  'init': init, 'cost': cost, 'acc': accuracy, 'model_name': model_config['model']['name'],
+                  'init': init, 'cost': cost, 'acc': accuracy, 'model_name': req_config['model_name'],
                   'keep_prob': keep_prob, 'batch_size': batch_size}
         return config
 
 
-def init_input_tensor(training_dataset):
+def init_input_tensor(temp_dataset):
     input_tensor = {}
-
-    batch_x, batch_ys = training_dataset.next_train_batch(1)
-    training_data = batch_x
-    training_data['group_label'] = batch_ys
-    for input_id in training_data.keys():
+    for input_id in temp_dataset.keys():
         with tf.variable_scope(name_or_scope='input_layer_' + input_id, reuse=False):
-            input_tensor[input_id] = tf.placeholder("float", [None, len(training_data[input_id][0])], name=input_id)
+            input_tensor[input_id] = tf.placeholder("float", [None, len(temp_dataset[input_id][0])], name=input_id)
     return input_tensor
 
 

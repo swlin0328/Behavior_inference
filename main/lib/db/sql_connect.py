@@ -1,13 +1,9 @@
 # coding: utf-8
 
-import _pickle as cPickle
 from time import strftime
 import pymssql
-import keras
-import types
-import tempfile
-import keras.models
 import os
+import sqlalchemy as sqlc
 
 
 class sql_config():
@@ -28,8 +24,10 @@ class sql_config():
 		print('=====================================================')
 		print('Time : {}\n'.format(strftime('%Y-%m-%d_%H_%M')))
 		if self.db is None:
-			self.db = pymssql.connect(server=self.sql_config.host, port=self.sql_config.port, user=self.sql_config.user,
-									  password=self.sql_config.password, database=self.sql_config.db, charset="utf8")
+			url = 'mssql+pyodbc://{}:{}@{}/{}?driver={}'.format(self.user, self.password, self.host,
+																self.db_name, 'SQL Server Native Client 10.0')
+			self.engine = sqlc.create_engine(url)
+			self.db = self.engine.raw_connection()
 		self.cursor = self.db.cursor()
 
 	def commit(self):

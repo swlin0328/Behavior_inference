@@ -40,8 +40,6 @@ def final_test(testing_dataset, num_group, config, db_conn):
 
 
 def init_model(config, target_label, db_conn):
-    set_tf_session(config)
-
     sql4model = sql4Keras(model_name=config['model_name'], customer_group=target_label, sql_conn=db_conn)
     model = sql4model.load_model_from_sql()
     mse_threshold = sql4model.load_threshold_from_sql()

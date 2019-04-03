@@ -1,6 +1,5 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-from ..main.lib.model.keras_autoencoder import build_model
 from ..main.lib.util.dataset import dataset
 from ..main.lib.util.preprocess import get_num_group, generate_test_users
 from ..main.lib.util.validation import mse_evaluate, anomaly_metrics_validation
@@ -11,6 +10,7 @@ from keras.models import load_model
 import numpy as np
 import copy
 import math
+import os
 
 
 def start(config, db_conn):
@@ -99,7 +99,7 @@ def init_model(config, input_shape, model_name):
         model = load_model(path)
         print("=== Model restored ===")
     else:
-        model = build_model(input_shape, encoding_dim=6)
+        model = build_model(config, input_shape, encoding_dim=6)
     print(model.summary())
     return model
 
@@ -108,6 +108,19 @@ def save_model(model, model_name):
     path = DATA_PATH + 'result/model/' + model_name + '.h5'
     model.save(path)
     print("=== Model saved ===")
+
+
+def build_model(config, input_shape, encoding_dim):
+    path = r'./inference/main/lib/model/'
+    dir_path = path + config['model_name']
+    if not os.path.isdir(dir_path):
+        from ..main.lib.model.keras_autoencoder import build_model
+        return build_model(input_shape, encoding_dim)
+    else:
+        import sys
+        sys.path.append(dir_path)
+        from customized_model import build_model
+        return build_model(input_shape, encoding_dim)
 
 
 if __name__ == '__main__':

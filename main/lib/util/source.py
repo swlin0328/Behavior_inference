@@ -64,7 +64,7 @@ class data_extractor:
         self.get_group_and_key(cluster_df, 'cluster', 'User_ID')
 
     def extract_user_df(self, test_users):
-        drop_cols = ['User_ID', 'City', 'Region']
+        drop_cols = ['User_ID', 'Location_City', 'Location_Area']
         user_df = pd.read_csv(self.user_path)
         user_df = user_df.set_index(user_df['User_ID'])
         user_df = normalize(user_df, drop_cols, self.user_max)

@@ -7,8 +7,8 @@ import pandas as pd
 
 
 class sql4DB():
-	def __init__(self, query_config, sql_conn=None,
-				 user="", password="", database="", host_address='', port=''):
+	def __init__(self, query_config=None, sql_conn=None,
+                 user="", password="", database="", host_address='', port='1433'):
 		self.sql_config = sql_config(user, password, database, host_address, port, sql_conn)
 		self.query_config = query_config
 
@@ -19,12 +19,12 @@ class sql4DB():
 
 	def read_data(self, sql_query):
 		df = pd.read_sql(sql_query, self.sql_config.db)
+		self.sql_config.commit()
 		return df
 
-	def read_model_info(self):
+	def read_model_info(self, model_id=None):
 		search_model = "SELECT * FROM Inference_Model "
-		if 'model_id' in self.query_config.keys():
-			search_model = search_model + 'WHERE Model_ID = ' + self.query_config['model_id']
+		search_model = self.query_target_model(search_model, model_id)
 
 		model_df = self.read_data(search_model)
 		if not self.chk_df_empty(model_df):
@@ -35,12 +35,14 @@ class sql4DB():
 		chk_dnn = "SELECT Model_Type FROM Inference_Model WHERE Model_ID = ?"
 		self.sql_config.cursor.execute(chk_dnn, (model_id, ))
 		model_type = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
 		return model_type[0]
 
 	def search_model(self):
 		search_id = "SELECT Model_ID FROM Inference_Model WHERE Model_Name = ?"
 		self.sql_config.cursor.execute(search_id, (self.query_config['model_name'], ))
 		model_id = self.sql_config.cursor.fetchone()
+		self.sql_config.commit()
 		if model_id is not None:
 			return int(model_id[0])
 
@@ -62,16 +64,38 @@ class sql4DB():
 		dataset_df = self.read_data(search_dataset)
 		if not self.chk_df_empty(dataset_df):
 			dataset_df['Created_Time'] = dataset_df['Created_Time'].dt.strftime('%Y-%m-%d %H:%M')
-			dataset_df['Start_Time'] = dataset_df['Start_Time'].dt.strftime('%Y-%m-%d %H:%M')
-			dataset_df['End_Time'] = dataset_df['End_Time'].dt.strftime('%Y-%m-%d %H:%M')
+			#dataset_df['Start_Time'] = dataset_df['Start_Time'].dt.strftime('%Y-%m-%d %H:%M')
+			#dataset_df['End_Time'] = dataset_df['End_Time'].dt.strftime('%Y-%m-%d %H:%M')
 		return dataset_df
 
-	def read_evaluation_info(self):
+	def read_evaluation_info(self, model_id=None):
 		search_evaluation = "SELECT * FROM Inference_Evaluation "
-		if 'model_id' in self.query_config.keys():
-			search_evaluation = search_evaluation + 'WHERE Model_ID = ' + self.query_config['model_id']
+		search_evaluation = self.query_target_model(search_evaluation, model_id)
 
 		evaluation_df = self.read_data(search_evaluation)
 		if not self.chk_df_empty(evaluation_df):
 			evaluation_df['Created_Time'] = evaluation_df['Created_Time'].dt.strftime('%Y-%m-%d %H:%M')
 		return evaluation_df
+
+	def read_cluster_model_info(self):
+		search_model = "SELECT * FROM cluster_model"
+		cluster_df = self.read_data(search_model)
+		return cluster_df
+
+	def query_target_model(self, query_string, model_id):
+		if model_id is not None:
+			query_string = query_string + 'WHERE Model_ID = ' + str(model_id)
+		elif 'model_id' in self.query_config.keys():
+			query_string = query_string + 'WHERE Model_ID = ' + self.query_config['model_id']
+		return query_string
+
+	def produce_query_string(self):
+		if self.query_config['query_type'] == 'model':
+			query_string = "SELECT Model_ID, Model_Name FROM Inference_Model"
+		elif self.query_config['query_type'] == 'model_layer':
+			query_string = "SELECT DISTINCT Model_ID FROM Inference_Model_Layer"
+		elif self.query_config['query_type'] == 'dataset':
+			query_string = "SELECT Dataset_ID, Experiment_Name FROM Inference_Dataset"
+		elif self.query_config['query_type'] == 'evaluation':
+			query_string = "SELECT Model_ID, Experiment_Name FROM Inference_Evaluation"
+		return query_string
