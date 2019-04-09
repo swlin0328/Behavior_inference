@@ -9,9 +9,10 @@ from ..cluster.preprocess import csv_process
 from ..cluster.model_storage import storage4cluster
 
 class user_dailyload_to_group():
-	def __init__(self, dataSet, model_name):
+	def __init__(self, dataSet, model_name, sql_conn):
 		self.dataSet = dataSet.copy()
 		self.model_name = model_name
+		self.sql_conn = sql_conn
 
 	def start(self):
 		dataSet = self.group_user_dailyload()
@@ -20,7 +21,7 @@ class user_dailyload_to_group():
 	def group_user_dailyload(self):
 		df_user_group = self.dataSet.groupby('User_ID')
 		userID = df_user_group.groups.keys()
-		model_storage = storage4cluster(model_name=self.model_name)
+		model_storage = storage4cluster(model_name=self.model_name, sql_conn=self.sql_conn)
 		KMeans_model = model_storage.load_model_from_sql()
 
 		user_dailyload_group = pd.DataFrame()

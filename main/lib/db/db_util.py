@@ -8,7 +8,7 @@ import pandas as pd
 
 class sql4DB():
 	def __init__(self, query_config=None, sql_conn=None,
-                 user="", password="", database="", host_address='', port='1433'):
+				 user="", password="", database="", host_address='', port='1433'):
 		self.sql_config = sql_config(user, password, database, host_address, port, sql_conn)
 		self.query_config = query_config
 

@@ -46,6 +46,9 @@ def inference_auto_training():
 	config = {
 		'model_name': 'svm_test_' + str(COUNT),
 		'model_type': 'SVM',
+		'pca_dim': 25,
+		'gamma': 0.1,
+		'C': 10.0,
 		'user': 'EE',
 		'test_users_per_group': 1}
 
@@ -80,7 +83,7 @@ def inference_testing():
 
 @app.route("/inference/upload_model", methods=['POST'])
 def inference_upload_model():
-	path = r'./inference/main/lib/model/'
+	path = r'./inference/lib/model/'
 	config = request.form
 	dir_path = path + config['model_name']
 	if not os.path.isdir(dir_path):
@@ -88,7 +91,7 @@ def inference_upload_model():
 
 	file = request.files['file']
 	file.save(dir_path + '/customized_model.py')
-	return redirect('http://111.11.111.110:5000/inference/train', code=307)
+	return redirect('http://111.11.111.111:5000/inference/train', code=307)
 
 
 @app.route("/inference/model_query", methods=['POST'])
@@ -118,10 +121,34 @@ def inference_download():
 	customer_dataset_download = DB2dataset(config, sql_conn=db_conn)
 	customer_dataset_download.start()
 
-	customer_dataset_download = clustering(config['cluster_model'], sql_conn=None)
+	customer_dataset_download = clustering(config['cluster_model'], sql_conn=db_conn)
 	customer_dataset_download.start()
 	result = {'download_state': True}
 	return dict2json(result, 'download_state')
+
+
+@app.route("/inference/model_train_string", methods=['GET'])
+def train_info():
+	dataset_list = list_dataset()
+	db_conn = db.create_engine(DB_PATH, deprecate_large_types=True).raw_connection()
+
+	query = sql4DB(sql_conn=db_conn)
+	result_df = query.read_cluster_model_info()
+	result_df = result_df.drop_duplicates(['model_name'])
+	result_df = result_df['model_name']
+	model_list = df2json(result_df, 'model_list', orient='records')
+	return combine_json_contain_list(dataset_list, model_list, 'dataset', 'model')
+
+
+@app.route("/inference/model_evaluation_string", methods=['GET'])
+def evaluation_info():
+	db_conn = db.create_engine(DB_PATH, deprecate_large_types=True).raw_connection()
+	config = {'query_type': 'model'}
+
+	query = sql4DB(config, db_conn)
+	query_string = query.produce_query_string()
+	result_df = query.read_data(query_string)
+	return df2json(result_df, 'model_list', orient='records')
 
 
 @app.route("/inference/model_query_string", methods=['POST'])
@@ -133,7 +160,6 @@ def query_info():
 	query_string = query.produce_query_string()
 	result_df = query.read_data(query_string)
 	return df2json(result_df, 'query_result', orient='records')
-
 
 if __name__ == '__main__':
 	warnings.filterwarnings("ignore")

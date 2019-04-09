@@ -3,11 +3,13 @@
 import pandas as pd
 from ..db.sql_connect import sql_config
 from ..config.config import DATA_PATH
+import datetime
+import math
 
 
 class DB2dataset():
 	def __init__(self, request_config, sql_conn=None,
-				 user="", password="", database="", host_address='', port=''):
+				 user="", password="", database="", host_address='', port='1433'):
 		self.sql_config = sql_config(user, password, database, host_address, port, sql_conn)
 		self.request_config = request_config
 
@@ -28,7 +30,8 @@ class DB2dataset():
 		return df
 
 	def read_kwh_consumption_table(self):
-		sql_query = "select * from Power_Consumption"
+		sql_query = "select * from Power_Consumption WHERE Created_Time BETWEEN '" + \
+					self.request_config['start_date'] + "' AND '" + self.request_config['end_date'] + "'"
 		df = self.read_data(sql_query)
 		return df
 
@@ -81,8 +84,13 @@ class DB2dataset():
 		return result_df
 
 	def generate_kwh_issues(self):
+		format_str = '%Y/%m/%d'
+		start_month = datetime.datetime.strptime(self.request_config['start_date'], format_str).date().month
+		end_month = datetime.datetime.strptime(self.request_config['end_date'], format_str).date().month
+		issues_num = 1 + math.ceil(abs(start_month - end_month) / 2)
+
 		user = ['User_ID']
-		issues = ['Issue_' + str(idx) for idx in range(1, 7)]
+		issues = ['Issue_' + str(idx) for idx in range(1, issues_num)]
 		result = user + issues
 		return result
 

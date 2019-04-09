@@ -17,8 +17,10 @@ ATTR_CONFIG = configparser.ConfigParser()
 ATTR_CONFIG.read(ATTR_FILE)
 
 DATA_PATH = DIR_CONFIG['DIR']['DATA_DIR']
+RESULT_PATH = DIR_CONFIG['DIR']['RESULT_DIR']
 WEATHER_ATTR = ast.literal_eval(ATTR_CONFIG['weather']['attr'])
 TAX_ATTR = ast.literal_eval(ATTR_CONFIG['tax']['attr'])
+
 
 def set_tf_session(config):
     warnings.filterwarnings("ignore")
@@ -28,6 +30,7 @@ def set_tf_session(config):
         tf_config.log_device_placement = bool(config['log_device'])
         sess = tf.Session(config['ip_config'], config=tf_config)
         K.set_session(sess)
+
 
 def set_attr_config(config):
     config_path = 'inference/data/config/infer_attr.ini'
@@ -41,6 +44,8 @@ def set_attr_config(config):
         tax_attr.append('中位數')
 
     parser.set('weather', 'attr', str(weather_attr))
+    parser.set('weather', 'start_date', config['start_date'])
+    parser.set('weather', 'end_date', config['end_date'])
     parser.set('tax', 'attr', str(tax_attr))
     with open(config_path, 'w+') as configfile:
         parser.write(configfile)
