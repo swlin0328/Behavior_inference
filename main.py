@@ -1,6 +1,7 @@
 # System Imports
 from flask import Flask, render_template, url_for, flash, redirect, request
 from flask_sqlalchemy import SQLAlchemy
+from flask import send_file
 import warnings
 import os
 
@@ -160,6 +161,14 @@ def query_info():
 	query_string = query.produce_query_string()
 	result_df = query.read_data(query_string)
 	return df2json(result_df, 'query_result', orient='records')
+
+
+@app.route("inference/download_template", methods=['Get'])
+def download_template():
+	try:
+		return send_file('./inference/lib/model/keras_autoencoder.py', attachment_filename='template.py')
+	except Exception as e:
+		return str(e)
 
 if __name__ == '__main__':
 	warnings.filterwarnings("ignore")
