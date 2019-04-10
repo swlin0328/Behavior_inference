@@ -25,10 +25,12 @@ TAX_ATTR = ast.literal_eval(ATTR_CONFIG['tax']['attr'])
 def set_tf_session(config):
     warnings.filterwarnings("ignore")
     K.clear_session()
+    cluster_dict = get_gpu_cluster()
     if config['ip_config'] is not None and config['ip_config'] != '':
         tf_config = tf.ConfigProto()
         tf_config.log_device_placement = bool(config['log_device'])
-        sess = tf.Session(config['ip_config'], config=tf_config)
+        cluster_name = config['ip_config']
+        sess = tf.Session(cluster_dict[cluster_name].target, config=tf_config)
         K.set_session(sess)
 
 
@@ -49,3 +51,14 @@ def set_attr_config(config):
     parser.set('tax', 'attr', str(tax_attr))
     with open(config_path, 'w+') as configfile:
         parser.write(configfile)
+
+
+def get_gpu_cluster():
+    cluster_0 = tf.train.ClusterSpec({"worker": ["111.111.1.111:2222", "111.111.1.111:2222"],
+                                      "ps": ["111.111.1.111:2222"]})
+    server_0 = tf.train.Server(cluster_0, job_name='worker', task_index=0)
+
+    cluster_1 = tf.train.ClusterSpec({"worker": ["111.111.1.111:2222", "111.111.1.111:2222"],
+                                      "ps": ["111.111.1.111:2222"]})
+    server_1 = tf.train.Server(cluster_1, job_name='worker', task_index=0)
+    return {'Cluster_0': server_0, 'Cluster_1': server_1}

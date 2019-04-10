@@ -9,7 +9,7 @@ from ..main.lib.config.config import DATA_PATH
 from ..main.lib.db.dataset import sql4Dataset
 from ..main.lib.util.validation import tf_validation as validation
 from ..main.lib.db.dnn_model import sql4Tensorflow
-from sklearn.metrics import f1_score, accuracy_score
+from ..taipower_inference.lib.config.config import get_gpu_cluster
 
 
 def start(req_config, db_conn):
@@ -47,7 +47,9 @@ def train_pipeline(training_data, validating_data, temp_data, req_config, db_con
     tf.reset_default_graph()
     tf_config = tf.ConfigProto()
     tf_config.log_device_placement = bool(req_config['log_device'])
-    with tf.Session(req_config['ip_config'], config=tf_config) as sess:
+    cluster_dict = get_gpu_cluster()
+    cluster_name = req_config['ip_config']
+    with tf.Session(cluster_dict[cluster_name].target, config=tf_config) as sess:
         model_config = build_model(temp_data, req_config)
         init_model(sess, model_config, reload=req_config['reload_model'])
         step = train_model(sess, model_config, training_data, req_config)
